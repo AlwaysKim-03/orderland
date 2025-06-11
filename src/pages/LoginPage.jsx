@@ -1,40 +1,62 @@
-import React from 'react';
-import axios from 'axios';
-import Cookies from 'js-cookie';
-import LoginForm from '../components/LoginForm';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { loginUser } from "../api/wordpress";
+import "./LoginPage.css";
 
 function LoginPage() {
   const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
-  const handleLogin = async ({ username, password }) => {
+  const handleLogin = async (e) => {
+    e.preventDefault();
     try {
-      const response = await axios.post(`${import.meta.env.VITE_SITE_URL}/wp-json/jwt-auth/v1/token`, {
-        username,
-        password,
+      const res = await loginUser({ email, password });
+      localStorage.setItem("token", res.token);
+      localStorage.setItem("user_email", email);
+      // 로그인 성공 후 orderHistory_로 시작하는 localStorage 키 모두 삭제
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('orderHistory_')) {
+          localStorage.removeItem(key);
+        }
       });
-
-      const { token, user_nicename } = response.data;
-
-      // 로그인 성공한 경우
-      if (token) {
-        Cookies.set('token', token, { expires: 1 });
-        localStorage.setItem('token', token);
-        localStorage.setItem('user_email', username);
-        navigate('/dashboard');
-      }
-
-      alert(`${user_nicename}님, 로그인 성공!`);
-      // 추후 관리자 페이지 등으로 이동
-      // window.location.href = '/dashboard';
-
-    } catch (error) {
-      console.error('로그인 실패:', error.response?.data || error.message);
-      alert('로그인 실패: 아이디 또는 비밀번호를 확인하세요.');
+      alert("로그인 성공");
+      navigate("/dashboard");
+    } catch (err) {
+      alert("로그인 실패: " + (err.response?.data?.message || err.message));
     }
   };
 
-  return <LoginForm onSubmit={handleLogin} />;
+  return (
+    <div className="login-container">
+      <div className="login-box">
+        <h2>로그인</h2>
+        <form onSubmit={handleLogin}>
+          <input
+            type="text"
+            placeholder="이메일 또는 아이디"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <input
+            type="password"
+            placeholder="비밀번호"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+          <button type="submit">로그인</button>
+        </form>
+        <p>
+          아직 계정이 없으신가요?{" "}
+          <a href="/register" style={{ color: "#2e6ff2" }}>
+            회원가입
+          </a>
+        </p>
+      </div>
+    </div>
+  );
 }
 
-export default LoginPage; 
+export default LoginPage;

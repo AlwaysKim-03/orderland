@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import StoreInfoTab from './dashboard/StoreInfoTab';
 import OrderTab from './dashboard/OrderTab';
 import SalesTab from './dashboard/SalesTab';
 import MenuTab from './dashboard/MenuTab';
+import OrderManagePage from './dashboard/OrderManagePage';
 import axios from 'axios';
+import { toSlug } from '../utils/slug';
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('store');
@@ -11,9 +13,9 @@ export default function DashboardPage() {
   const [menuList, setMenuList] = useState([]);
   const [categories, setCategories] = useState([]);
   const [orders, setOrders] = useState([]);
-
-  // 매장이름을 localStorage에서 읽어오고, 없으면 '내 매장'으로 표시
-  const restaurantName = localStorage.getItem('restaurantName') || '내 매장';
+  const [callRequests, setCallRequests] = useState([]);
+  const [restaurantName, setRestaurantName] = useState(localStorage.getItem('restaurantName') || '내 매장');
+  const intervalRef = useRef(null);
 
   // 초기 데이터 로드
   useEffect(() => {
@@ -30,12 +32,26 @@ export default function DashboardPage() {
           setMenuList(parsedMenus);
           setCategories(parsedCategories);
           setTableCount(meta.tableCount || 1);
+          // 회원가입/로그인 시 display_name(가게명) 또는 meta.restaurantName을 restaurantName 상태와 localStorage에 즉시 반영
+          const newName = meta.restaurantName || userData.display_name || userData.name || '';
+          if (newName) {
+            setRestaurantName(newName);
+            localStorage.setItem('restaurantName', newName);
+          }
         })
         .catch(err => {
           console.error('사용자 정보 불러오기 실패:', err);
         });
     }
   }, []);
+
+  // 가게명 동기화: localStorage, userInfo, form 등에서 최신값으로 갱신
+  useEffect(() => {
+    const stored = localStorage.getItem('restaurantName');
+    if (stored && stored !== restaurantName) {
+      setRestaurantName(stored);
+    }
+  }, [restaurantName]);
 
   // 메뉴/카테고리 정보 저장
   const saveMenuData = async () => {
@@ -76,57 +92,95 @@ export default function DashboardPage() {
 
   // 주문 추가 함수
   const addOrder = async (tableNumber, menuItems, totalAmount) => {
-    const newOrder = {
-      id: Date.now(),
-      tableNumber,
-      menuItems,
-      totalAmount,
-      status: '진행중',
-      timestamp: new Date().toISOString()
-    };
-
-    // 임시로 주문 추가
-    setOrders(prevOrders => [...prevOrders, newOrder]);
-
     try {
-      const response = await axios.post('http://localhost:5001/api/save-order', {
+      const orderData = {
+        storeSlug: restaurantName,
         tableNumber,
-        menuItems,
-        totalAmount
-      });
-
-      if (response.data.success) {
-        console.log('✅ 주문 백엔드 저장 완료:', response.data.data);
-      } else {
-        throw new Error(response.data.error || '주문 저장 실패');
-      }
+        orders: menuItems.map(item => ({
+          name: item.name,
+          category: item.category || '',
+          price: Number(item.price),
+          quantity: Number(item.quantity)
+        })),
+        totalAmount,
+        status: '신규'
+      };
+      await axios.post('http://localhost:5001/api/orders', orderData);
+      await fetchOrders();
+      alert('주문이 추가되었습니다!');
     } catch (err) {
-      console.error('❌ 주문 백엔드 저장 실패:', err);
-      // 실패 시 주문 목록에서 제거
-      setOrders(prevOrders => prevOrders.filter(order => order.id !== newOrder.id));
-      throw err; // 에러를 상위로 전파하여 UI에서 처리할 수 있도록 함
+      alert('주문 추가 실패: ' + (err.response?.data?.error || err.message));
     }
   };
 
   // 주문 상태 업데이트 함수
-  const updateOrderStatus = (orderId, newStatus) => {
-    setOrders(orders.map(order => 
-      order.id === orderId ? { ...order, status: newStatus } : order
-    ));
+  const updateOrderStatus = async (orderId, newStatus) => {
+    try {
+      await axios.post('http://localhost:5001/api/orders/update-order', {
+        orderId,
+        status: newStatus
+      });
+      await fetchOrders();
+    } catch (err) {
+      console.error('주문 상태 업데이트 실패:', err);
+    }
   };
+
+  // 워드프레스에서 주문 목록 fetch
+  const fetchOrders = async () => {
+    const storeSlug = toSlug(localStorage.getItem('restaurantName'));
+    try {
+      const res = await axios.get(`http://localhost:5001/api/orders/store/${storeSlug}`);
+      // 주문 데이터 정규화
+      const normalizedOrders = (res.data || []).map(order => ({
+        ...order,
+        orders: Array.isArray(order.orders) 
+          ? order.orders 
+          : (typeof order.orders === 'string' ? JSON.parse(order.orders) : [])
+      }));
+      setOrders(normalizedOrders);
+    } catch (err) {
+      setOrders([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrders();
+    intervalRef.current = setInterval(fetchOrders, 5000); // 5초마다 polling
+    return () => clearInterval(intervalRef.current);
+  }, []);
+
+  useEffect(() => {
+    const fetchCalls = async () => {
+      try {
+        const res = await axios.get('https://happyfabric02.mycafe24.com/wp-json/wp/v2/call_request', {
+          params: { per_page: 20, order: 'desc' }
+        });
+        setCallRequests(res.data);
+      } catch (err) {
+        setCallRequests([]);
+      }
+    };
+    fetchCalls();
+    const interval = setInterval(fetchCalls, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const renderContent = () => {
     switch (activeTab) {
       case 'store':
-        return <StoreInfoTab tableCount={tableCount} setTableCount={setTableCount} orders={orders} />;
+        return <StoreInfoTab tableCount={tableCount} setTableCount={setTableCount} orders={orders} fetchOrders={fetchOrders} restaurantName={restaurantName} setRestaurantName={setRestaurantName} />;
       case 'orders':
         return (
-          <OrderTab 
-            tableCount={tableCount} 
-            setTableCount={setTableCount} 
+          <OrderManagePage
+            tableCount={tableCount}
+            setTableCount={setTableCount}
             orders={orders}
+            fetchOrders={fetchOrders}
             addOrder={addOrder}
             updateOrderStatus={updateOrderStatus}
+            restaurantName={restaurantName}
+            setRestaurantName={setRestaurantName}
           />
         );
       case 'sales':
@@ -138,6 +192,8 @@ export default function DashboardPage() {
             setMenuList={setMenuList}
             categories={categories}
             setCategories={setCategories}
+            restaurantName={restaurantName}
+            setRestaurantName={setRestaurantName}
           />
         );
       default:
@@ -146,10 +202,55 @@ export default function DashboardPage() {
   };
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#f5f6f7', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 2px 16px rgba(0,0,0,0.08)', minWidth: 400, maxWidth: 600, width: '100%', padding: 40 }}>
+    <div style={{ width: '100vw', height: '100vh', background: '#fff', margin: 0, padding: 8, boxSizing: 'border-box' }}>
+      <div style={{ width: '100%', minHeight: '100vh', background: '#fff', margin: 0, padding: 0, boxSizing: 'border-box' }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ color: '#222' }}>{restaurantName}</h2>
+          <div>
+            <h2 style={{ color: '#222' }}>{restaurantName}</h2>
+            <h4 style={{ margin: 0 }}>직원 호출 현황</h4>
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              {callRequests.map(call => (
+                <li key={call.id} style={{ marginBottom: 4, color: '#f59e42', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {(() => {
+                    // 테이블 번호 추출
+                    const titleStr = call.title?.rendered || '';
+                    // HTML 엔티티 변환 및 소문자화
+                    const cleanTitle = titleStr.replace(/&#8211;|&ndash;|&mdash;/g, '-').toLowerCase();
+                    let tableNum = '?';
+                    const match = cleanTitle.match(/table[-\s]?(\d+)/);
+                    if (match) {
+                      tableNum = match[1];
+                    } else {
+                      console.warn('호출 title 파싱 실패:', titleStr);
+                    }
+                    return `${tableNum}번 테이블 직원 호출`;
+                  })()}
+                  <button
+                    onClick={async () => {
+                      await axios.delete(`https://happyfabric02.mycafe24.com/wp-json/custom/v1/call/${call.id}`);
+                      setCallRequests(prev => prev.filter(c => c.id !== call.id));
+                    }}
+                    style={{
+                      marginLeft: 8,
+                      background: '#fff',
+                      color: '#222',
+                      border: '1px solid #ddd',
+                      borderRadius: 6,
+                      padding: '2px 12px',
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'background 0.2s',
+                    }}
+                    onMouseOver={e => e.currentTarget.style.background = '#f3f4f6'}
+                    onMouseOut={e => e.currentTarget.style.background = '#fff'}
+                  >
+                    확인
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
           <a href="/login" style={{ color: 'red' }}>로그아웃</a>
         </header>
 

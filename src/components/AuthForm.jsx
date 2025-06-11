@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-function AuthForm({ onSubmit }) {
+function AuthForm({ onSubmit, mode = 'register' }) {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
@@ -37,6 +37,14 @@ function AuthForm({ onSubmit }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (mode === 'login') {
+      if (!formData.username || !formData.password) {
+        alert('계정과 비밀번호를 모두 입력해주세요.');
+        return;
+      }
+      onSubmit({ username: formData.username, password: formData.password });
+      return;
+    }
     if (!formData.username || !formData.password || !formData.confirmPassword) {
       alert('아이디와 비밀번호를 모두 입력해주세요.');
       return;
@@ -53,90 +61,87 @@ function AuthForm({ onSubmit }) {
     navigate('/login');
   };
 
-  return (
-    <div style={{ width: '100vw', height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#f5f6f7' }}>
-      <form onSubmit={handleSubmit} style={{ background: '#fff', padding: '40px', borderRadius: '8px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', minWidth: '320px', width: '100%', maxWidth: '400px' }}>
-        <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>회원가입</h2>
+  const goToRegister = (e) => {
+    e.preventDefault();
+    navigate('/register');
+  };
 
-        {step === 1 && (
-          <>
-            <input type="text" name="name" placeholder="이름" value={formData.name} onChange={handleChange} style={inputStyleDefault} required />
-            <input type="text" name="phone" placeholder="전화번호" value={formData.phone} onChange={handleChange} style={inputStyleDefault} required />
-            <button type="button" onClick={handleNext} style={buttonStyle}>다음</button>
-          </>
-        )}
-
-        {step === 2 && (
-          <>
-            <input type="text" name="restaurantName" placeholder="식당 이름" value={formData.restaurantName} onChange={handleChange} style={inputStyleDefault} required />
-            <input type="text" name="restaurantLocation" placeholder="식당 위치" value={formData.restaurantLocation} onChange={handleChange} style={inputStyleDefault} required />
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button type="button" onClick={handleBack} style={backButtonStyle}>뒤로가기</button>
-              <button type="button" onClick={handleNext} style={buttonStyle}>다음</button>
-            </div>
-          </>
-        )}
-
-        {step === 3 && (
-          <>
-            <input type="text" name="username" placeholder="아이디" value={formData.username} onChange={handleChange} style={inputStyleDefault} required />
-            <input type="password" name="password" placeholder="비밀번호" value={formData.password} onChange={handleChange} style={inputStyleDefault} required />
-            <input type="password" name="confirmPassword" placeholder="비밀번호 확인" value={formData.confirmPassword} onChange={handleChange} style={inputStyleDefault} required />
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button type="button" onClick={handleBack} style={backButtonStyle}>뒤로가기</button>
-              <button type="submit" style={buttonStyle}>회원가입</button>
-            </div>
-          </>
-        )}
+  if (mode === 'login') {
+    return (
+      <form onSubmit={handleSubmit} style={{ maxWidth: 400, margin: '80px auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 16px #0001', padding: 32 }}>
+        <div style={{ marginBottom: 16 }}>
+          <input
+            name="username"
+            value={formData.username}
+            onChange={handleChange}
+            placeholder="계정"
+            style={{ width: '100%', padding: 12, marginBottom: 12, fontSize: 16 }}
+          />
+          <input
+            name="password"
+            type="password"
+            value={formData.password}
+            onChange={handleChange}
+            placeholder="비밀번호"
+            style={{ width: '100%', padding: 12, fontSize: 16 }}
+          />
+        </div>
+        <button type="submit" style={{ width: '100%', background: '#111', color: '#fff', border: 'none', borderRadius: 12, padding: '12px 0', fontSize: 18, cursor: 'pointer' }}>
+          로그인
+        </button>
+        <div style={{ textAlign: 'center', marginTop: 16 }}>
+          <span>아직 계정이 없으신가요? </span>
+          <button
+            type="button"
+            style={{ background: 'none', color: '#1976d2', border: 'none', fontSize: 16, cursor: 'pointer', textDecoration: 'underline', marginLeft: 4 }}
+            onClick={goToRegister}
+          >
+            회원가입
+          </button>
+        </div>
       </form>
-      <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '14px' }}>
-        <span style={{ color: '#3b82f6' }}>이미 계정이 있으신가요? </span>
-        <a
-          href="/login"
+    );
+  }
+
+  // 기존 회원가입 폼 렌더링 (mode !== 'login')
+  return (
+    <form onSubmit={handleSubmit} style={{ maxWidth: 400, margin: '80px auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 16px #0001', padding: 32 }}>
+      {step === 1 && (
+        <>
+          <input name="name" value={formData.name} onChange={handleChange} placeholder="이름" style={{ width: '100%', padding: 12, marginBottom: 12, fontSize: 16 }} />
+          <input name="phone" value={formData.phone} onChange={handleChange} placeholder="전화번호" style={{ width: '100%', padding: 12, fontSize: 16 }} />
+        </>
+      )}
+      {step === 2 && (
+        <>
+          <input name="restaurantName" value={formData.restaurantName} onChange={handleChange} placeholder="식당 이름" style={{ width: '100%', padding: 12, marginBottom: 12, fontSize: 16 }} />
+          <input name="restaurantLocation" value={formData.restaurantLocation} onChange={handleChange} placeholder="식당 위치" style={{ width: '100%', padding: 12, fontSize: 16 }} />
+        </>
+      )}
+      {step === 3 && (
+        <>
+          <input name="username" value={formData.username} onChange={handleChange} placeholder="계정(이메일)" style={{ width: '100%', padding: 12, marginBottom: 12, fontSize: 16 }} />
+          <input name="password" type="password" value={formData.password} onChange={handleChange} placeholder="비밀번호" style={{ width: '100%', padding: 12, marginBottom: 12, fontSize: 16 }} />
+          <input name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleChange} placeholder="비밀번호 확인" style={{ width: '100%', padding: 12, fontSize: 16 }} />
+        </>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
+        {step > 1 && <button type="button" onClick={handleBack} style={{ background: '#eee', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 16, cursor: 'pointer' }}>이전</button>}
+        {step < 3 && <button type="button" onClick={handleNext} style={{ background: '#1976d2', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 16, cursor: 'pointer', marginLeft: 'auto' }}>다음</button>}
+        {step === 3 && <button type="submit" style={{ background: '#1976d2', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 16, cursor: 'pointer', marginLeft: 'auto' }}>회원가입</button>}
+      </div>
+      <div style={{ textAlign: 'center', marginTop: 16 }}>
+        <span>이미 계정이 있으신가요? </span>
+        <button
+          type="button"
+          style={{ background: 'none', color: '#1976d2', border: 'none', fontSize: 16, cursor: 'pointer', textDecoration: 'underline', marginLeft: 4 }}
           onClick={goToLogin}
-          style={{ color: '#3b82f6', textDecoration: 'underline' }}
         >
           로그인
-        </a>
+        </button>
       </div>
-    </div>
+    </form>
   );
 }
-
-const inputStyleDefault = {
-  width: '100%',
-  padding: '12px',
-  marginBottom: '12px',
-  fontSize: '14px',
-  borderRadius: '4px',
-  border: '1px solid #000',
-  background: '#fff',
-  color: '#222',
-  boxSizing: 'border-box'
-};
-
-const buttonStyle = {
-  width: '100%',
-  backgroundColor: '#3b82f6',
-  color: '#fff',
-  padding: '12px',
-  fontSize: '16px',
-  borderRadius: '4px',
-  border: 'none',
-  cursor: 'pointer',
-  marginTop: '8px',
-};
-
-const backButtonStyle = {
-  width: '100%',
-  backgroundColor: '#e5e7eb',
-  color: '#222',
-  padding: '12px',
-  fontSize: '16px',
-  borderRadius: '4px',
-  border: 'none',
-  cursor: 'pointer',
-  marginTop: '8px',
-};
 
 export default AuthForm; 
