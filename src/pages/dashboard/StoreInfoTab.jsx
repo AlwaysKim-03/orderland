@@ -101,7 +101,11 @@ export default function StoreInfoTab({ tableCount, setTableCount, orders = [], f
 
     try {
       // 1. 사용자 정보 업데이트
-      await axios.post(`/api/update-user-info`, updateData);
+      await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/update-user-info`, updateData, {
+        headers: {
+          Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
+        }
+      });
 
       // 2. 워드프레스 카테고리/메뉴 일괄 동기화 (가게명 변경 시)
       if (prevStoreName && newStoreName && prevStoreName !== newStoreName) {

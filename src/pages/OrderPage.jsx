@@ -116,7 +116,11 @@ export default function OrderPage() {
         setLoading(true);
         // storeSlug(김한결-가게) → storeName(slug)
         const storeName = toSlug(storeSlug);
-        const idRes = await axios.get(`http://localhost:5001/api/get-account-id?storeName=${encodeURIComponent(storeName)}`);
+        const idRes = await axios.get(`${import.meta.env.VITE_API_URL.replace('/wp-json','')}/wp-json/custom/v1/get-account-id?storeName=${encodeURIComponent(storeName)}`, {
+          headers: {
+            Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
+          }
+        });
         const accountId = idRes.data?.accountId;
         if (!accountId) throw new Error('계정 ID를 찾을 수 없습니다.');
         const res = await axios.get(`http://localhost:5001/api/get-categories-by-store?accountId=${accountId}`);
@@ -246,10 +250,14 @@ export default function OrderPage() {
 
   const handleCallStaff = async () => {
     try {
-      await axios.post('/api/custom/v1/call', {
+      await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/call`, {
         storeSlug,
         tableNumber: params.tableId,
         timestamp: new Date().toISOString()
+      }, {
+        headers: {
+          Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
+        }
       });
       alert('직원 호출 요청이 전송되었습니다!');
     } catch (err) {

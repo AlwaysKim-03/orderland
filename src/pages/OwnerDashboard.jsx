@@ -8,7 +8,7 @@ const saveStoreMeta = async (storeId, tableCount, restaurantName) => {
       restaurantName
     });
 
-    const response = await fetch(`/api/store/${storeId}`, {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/custom/v1/store/${storeId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -46,7 +46,7 @@ const OwnerDashboard = ({ user }) => {
           return;
         }
 
-        const res = await fetch(`/api/store/${user.storeId}`);
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/custom/v1/store/${user.storeId}`);
         const data = await res.json();
 
         console.log('📥 [fetchStoreData] 사용자 store 정보 응답:', data);

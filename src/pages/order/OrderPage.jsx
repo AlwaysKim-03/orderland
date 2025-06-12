@@ -25,14 +25,18 @@ export default function OrderPage() {
       try {
         setLoading(true);
         // 1. 카테고리 불러오기
-        const catRes = await axios.get(`http://localhost:5001/api/get-categories-by-store?accountId=${accountId}`);
+        const catRes = await axios.get(`${import.meta.env.VITE_API_URL.replace('/wp-json','')}/wp-json/custom/v1/get-categories-by-store?accountId=${accountId}`, {
+          headers: {
+            Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
+          }
+        });
         const myCategories = catRes.data;
         setCategories(myCategories);
         const myCategoryIds = myCategories.map(cat => cat.id);
         console.log('🔖 내 카테고리:', myCategories.map(c => c.name));
 
         // 2. 상품 불러오기 (첫 카테고리 기준)
-        const prodRes = await axios.get(`http://localhost:5001/api/get-products-by-category?slug=${myCategories[0]?.slug}`);
+        const prodRes = await axios.get(`${import.meta.env.VITE_API_URL.replace('/wp-json','')}/wp-json/custom/v1/get-products-by-category?slug=${myCategories[0]?.slug}`);
         console.log('📦 전체 WooCommerce 상품 구조:', prodRes.data);
         // 상품에 카테고리명 추가
         const productsWithCategory = prodRes.data.map(product => {
@@ -101,7 +105,11 @@ export default function OrderPage() {
         })),
         totalAmount: cart.reduce((sum, item) => sum + Number(item.count) * Number(item.regular_price), 0)
       };
-      const response = await axios.post('http://localhost:5001/api/orders', orderData);
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/orders`, orderData, {
+        headers: {
+          Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
+        }
+      });
       setOrderNumber(response.data.orderNumber);
       setLastOrder(cart);
       alert('주문이 접수되었습니다!');
@@ -156,7 +164,11 @@ export default function OrderPage() {
     const fetchOrders = async () => {
       try {
         // 워드프레스에서 해당 매장의 주문 내역 조회
-        const res = await axios.get(`http://localhost:5001/api/orders/store/${storeSlug}`);
+        const res = await axios.get(`${import.meta.env.VITE_API_URL.replace('/wp-json','')}/wp-json/custom/v1/orders/store/${storeSlug}`, {
+          headers: {
+            Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
+          }
+        });
         
         // 현재 테이블의 주문만 필터링
         const tableOrders = (res.data || []).filter(order => {
@@ -279,153 +291,4 @@ export default function OrderPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <button
                   onClick={() => updateCartItemCount(item.id, item.count - 1)}
-                  aria-label={`${item.name} 수량 감소`}
-                  style={{
-                    padding: '2px 8px',
-                    backgroundColor: '#f0f0f0',
-                    color: '#000',
-                    border: 'none',
-                    borderRadius: 4,
-                    cursor: 'pointer',
-                    fontWeight: 'bold',
-                    outline: 'none',
-                    fontSize: '1.1em'
-                  }}
-                  onFocus={e => e.target.style.boxShadow = '0 0 0 2px #dc354544'}
-                  onBlur={e => e.target.style.boxShadow = 'none'}
-                >
-                  <span style={{ color: '#000', fontWeight: 700 }}>-</span>
-                </button>
-                <span style={{ color: '#000', fontWeight: 700 }}>{item.count}</span>
-                <button
-                  onClick={() => updateCartItemCount(item.id, item.count + 1)}
-                  aria-label={`${item.name} 수량 증가`}
-                  style={{
-                    padding: '2px 8px',
-                    backgroundColor: '#f0f0f0',
-                    color: '#000',
-                    border: 'none',
-                    borderRadius: 4,
-                    cursor: 'pointer',
-                    fontWeight: 'bold',
-                    outline: 'none',
-                    fontSize: '1.1em'
-                  }}
-                  onFocus={e => e.target.style.boxShadow = '0 0 0 2px #28a74544'}
-                  onBlur={e => e.target.style.boxShadow = 'none'}
-                >
-                  <span style={{ color: '#000', fontWeight: 700 }}>+</span>
-                </button>
-                <span style={{ color: '#000', marginLeft: 10, fontWeight: 500 }}>
-                  {(Number(item.count) * Number(item.regular_price)).toLocaleString()}원
-                </span>
-              </div>
-            </li>
-          ))}
-        </ul>
-
-        {/* 총액 및 주문하기 버튼 */}
-        <div style={{ marginTop: 20, textAlign: 'right' }}>
-          <p style={{ color: '#000', fontWeight: 'bold', fontSize: '1.2em' }}>
-            총액: {cart.reduce((sum, item) => sum + Number(item.count) * Number(item.regular_price), 0).toLocaleString()}원
-          </p>
-          <button 
-            onClick={handleOrderSubmit}
-            aria-label="주문하기"
-            disabled={orderLoading}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#f0f0f0',
-              color: '#000',
-              border: 'none',
-              borderRadius: 4,
-              cursor: orderLoading ? 'not-allowed' : 'pointer',
-              fontSize: '1.1em',
-              fontWeight: 'bold',
-              opacity: orderLoading ? 0.6 : 1,
-              outline: 'none',
-              letterSpacing: '-0.5px'
-            }}
-            onFocus={e => e.target.style.boxShadow = '0 0 0 2px #28a74544'}
-            onBlur={e => e.target.style.boxShadow = 'none'}
-          >
-            <span style={{ color: '#000', fontWeight: 700 }}>{orderLoading ? '주문 중...' : '주문하기'}</span>
-          </button>
-        </div>
-
-        {/* 주문번호 표시 */}
-        {orderNumber && lastOrder && (
-          <div style={{ 
-            marginTop: 20, 
-            padding: 15, 
-            backgroundColor: '#fafafa', 
-            borderRadius: 4,
-            textAlign: 'center',
-            color: '#000'
-          }}>
-            <p style={{ color: '#000', margin: 0 }}>
-              주문번호: <strong style={{ color: '#000' }}>{orderNumber}</strong>
-            </p>
-            <h4 style={{ color: '#000', margin: '10px 0 5px 0' }}>주문 상세</h4>
-            <ul style={{ listStyle: 'none', padding: 0, color: '#000', margin: 0 }}>
-              {lastOrder.map((item, idx) => (
-                <li key={idx} style={{ color: '#000', marginBottom: 4 }}>
-                  <span style={{ color: '#000' }}>[{item.category}] {item.name}</span> x <span style={{ color: '#000' }}>{item.quantity}</span>개 - <span style={{ color: '#000' }}>{(item.price * item.quantity).toLocaleString()}원</span>
-                </li>
-              ))}
-            </ul>
-            <button
-              onClick={() => navigate('/')}
-              style={{
-                marginTop: 10,
-                padding: '8px 16px',
-                backgroundColor: '#f0f0f0',
-                color: '#000',
-                border: 'none',
-                borderRadius: 4,
-                cursor: 'pointer',
-                fontWeight: 'bold',
-                outline: 'none',
-                fontSize: '1.1em'
-              }}
-              aria-label="주문 내역 보기"
-              onFocus={e => e.target.style.boxShadow = '0 0 0 2px #007bff44'}
-              onBlur={e => e.target.style.boxShadow = 'none'}
-            >
-              <span style={{ color: '#000', fontWeight: 700 }}>주문 내역 보기</span>
-            </button>
-          </div>
-        )}
-
-        <button onClick={() => setShowHistory(true)} style={{ position: 'fixed', top: 20, right: 20, zIndex: 100, background: '#f0f0f0', color: '#000', border: 'none', borderRadius: 4, padding: '8px 16px', fontWeight: 'bold', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-          내가 시킨 내역
-        </button>
-        {showHistory && renderHistoryModal()}
-      </div>
-      {/* 우측 주문내역 패널 */}
-      <div style={{ width: 340, minWidth: 280, background: '#f8f8f8', borderLeft: '1px solid #eee', padding: 24, boxSizing: 'border-box', minHeight: '100vh', position: 'sticky', top: 0, overflowY: 'auto' }}>
-        <h3 style={{ color: '#000', marginBottom: 16 }}>총 주문내역</h3>
-        {orderHistory.length === 0 ? (
-          <div style={{ color: '#000' }}>주문 내역이 없습니다.</div>
-        ) : (
-          <ul style={{ listStyle: 'none', padding: 0, color: '#000' }}>
-            {orderHistory.slice().reverse().map((order, idx) => (
-              <li key={idx} style={{ marginBottom: 16, borderBottom: '1px solid #eee', paddingBottom: 8 }}>
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>주문번호: {order.orderNumber || '(임시)'}</div>
-                <div style={{ fontSize: '0.95em', color: '#333', marginBottom: 4 }}>{new Date(order.date).toLocaleString()}</div>
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                  {order.items.map((item, i) => (
-                    <li key={i} style={{ color: '#000' }}>
-                      <span>[{item.category}] {item.name}</span> x <span>{item.quantity}</span>개 - <span>{(item.price * item.quantity).toLocaleString()}원</span>
-                    </li>
-                  ))}
-                </ul>
-                <div style={{ fontWeight: 700, marginTop: 4 }}>총액: {order.total.toLocaleString()}원</div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-} 
+                  aria-label={`${item.name} 수량 감소`

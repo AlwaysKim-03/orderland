@@ -149,7 +149,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchCalls = async () => {
       try {
-        const res = await axios.get('/api/call_request', {
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/wp/v2/call_request`, {
           params: { per_page: 20, order: 'desc' }
         });
         setCallRequests(res.data);
