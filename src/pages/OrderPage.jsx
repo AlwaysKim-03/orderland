@@ -123,7 +123,11 @@ export default function OrderPage() {
         });
         const accountId = idRes.data?.accountId;
         if (!accountId) throw new Error('계정 ID를 찾을 수 없습니다.');
-        const res = await axios.get(`http://localhost:5001/api/get-categories-by-store?accountId=${accountId}`);
+        const res = await axios.get(`${import.meta.env.VITE_API_URL.replace('/wp-json','')}/wp-json/custom/v1/get-categories-by-store?accountId=${accountId}`, {
+          headers: {
+            Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
+          }
+        });
         if (!Array.isArray(res.data) || res.data.length === 0) throw new Error('카테고리가 없습니다.');
         setCategories(res.data);
         setSelectedCategory(res.data[0]);
@@ -142,7 +146,7 @@ export default function OrderPage() {
     const fetchMenus = async () => {
       try {
         setLoading(true);
-        const res = await axios.get(`http://localhost:5001/api/get-products-by-category?slug=${selectedCategory.slug}`);
+        const res = await axios.get(`${import.meta.env.VITE_API_URL.replace('/wp-json','')}/wp-json/custom/v1/get-products-by-category?slug=${selectedCategory.slug}`);
         setProducts(res.data);
       } catch (err) {
         setError(err.message);
@@ -156,7 +160,11 @@ export default function OrderPage() {
   // 주문내역 서버에서 불러오는 함수 분리
   const fetchOrders = async () => {
     try {
-      const res = await axios.get(`http://localhost:5001/api/orders/store/${storeSlug}`);
+      const res = await axios.get(`${import.meta.env.VITE_API_URL.replace('/wp-json','')}/wp-json/custom/v1/orders/store/${storeSlug}`, {
+        headers: {
+          Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
+        }
+      });
       const myTableKey = getTableKey(storeSlug, params.tableId);
       const filtered = (res.data || []).filter(order => order.tableNumber === myTableKey);
       // 주문 데이터 정규화
@@ -228,7 +236,11 @@ export default function OrderPage() {
         totalAmount: cart.reduce((sum, item) => sum + item.count * Number(item.regular_price), 0),
         status: '신규'
       };
-      const response = await axios.post('http://localhost:5001/api/orders', orderData);
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/orders`, orderData, {
+        headers: {
+          Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
+        }
+      });
       if (response.data.success) {
         await fetchOrders();
         setCart([]);
