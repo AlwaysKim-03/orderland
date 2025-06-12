@@ -44,7 +44,7 @@ export default function GuestPage() {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const res = await axios.get(`http://localhost:5001/api/orders/store/${storeSlug}`);
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/custom/v1/orders?storeSlug=${storeSlug}`);
         const tableOrders = (res.data || []).filter(order => order.tableNumber === tableNumber);
         // 주문 데이터 정규화
         const normalizedOrders = tableOrders.map(order => ({
@@ -67,7 +67,7 @@ export default function GuestPage() {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const response = await axios.get(`http://localhost:5001/api/get-categories-by-store/${storeSlug}`);
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/custom/v1/get-categories-by-store/${storeSlug}`);
         setCategories(response.data);
         if (response.data.length > 0) {
           setSelectedCategory(response.data[0]);
@@ -84,7 +84,7 @@ export default function GuestPage() {
     const fetchMenuItems = async () => {
       if (!selectedCategory) return;
       try {
-        const response = await axios.get(`http://localhost:5001/api/get-products-by-category/${selectedCategory.slug}`);
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/custom/v1/get-products-by-category/${selectedCategory.slug}`);
         setMenuItems(response.data);
       } catch (error) {
         console.error('메뉴 로딩 실패:', error);
@@ -156,7 +156,7 @@ export default function GuestPage() {
         totalAmount: orders.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0),
         status: '신규'
       };
-      const response = await axios.post('http://localhost:5001/api/orders', orderData);
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/orders`, orderData);
       if (response.data.success) {
         setOrders([]);
         setIsOrderModalOpen(false);

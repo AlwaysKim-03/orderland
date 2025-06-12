@@ -24,7 +24,7 @@ function displayName(slug) {
 async function uploadImageToWordPress(file) {
   const formData = new FormData();
   formData.append('file', file);
-  const response = await fetch(`${import.meta.env.VITE_SITE_URL}/wp-json/wp/v2/media`, {
+  const response = await fetch(`${import.meta.env.VITE_API_URL}/wp-json/wp/v2/media`, {
     method: 'POST',
     headers: {
       'Authorization': 'Basic ' + btoa(`${import.meta.env.VITE_WP_ADMIN_USER}:${import.meta.env.VITE_WP_APP_PASSWORD}`)
@@ -67,7 +67,7 @@ export default function MenuTab() {
         'Content-Type': 'application/json'
       };
       const res = await axios.get(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/categories`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/categories`,
         { headers: wooHeaders }
       );
       const userCategories = Array.isArray(res.data)
@@ -86,7 +86,7 @@ export default function MenuTab() {
     try {
       // 1. 내 카테고리 ID 목록 수집
       const catRes = await axios.get(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/categories`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/categories`,
         { headers: wooHeaders }
       );
       const storeName = getCurrentStoreName();
@@ -96,7 +96,7 @@ export default function MenuTab() {
 
       // 2. 전체 메뉴 불러오기
       const res = await axios.get(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products`,
         { headers: wooHeaders }
       );
 
@@ -149,7 +149,7 @@ export default function MenuTab() {
       const categorySlug = toSlug(newMenu.category);
       const categoryName = `${storeName}_${categoryLabel}`;
       const categoryListRes = await axios.get(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/categories?search=${categoryName}`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/categories?search=${categoryName}`,
         { headers: wooHeaders }
       );
       const matchedCategory = categoryListRes.data.find(c => {
@@ -163,7 +163,7 @@ export default function MenuTab() {
       }
       // 2. 동일한 이름의 메뉴가 있는지 확인
       const existingMenusRes = await axios.get(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products`,
         { headers: wooHeaders }
       );
       const isDuplicate = existingMenusRes.data.some(m => 
@@ -176,7 +176,7 @@ export default function MenuTab() {
       }
       // 3. 메뉴 저장 (label/slug 분리)
       await axios.post(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products`,
         {
           name: newMenu.name, // label(띄어쓰기 포함)
           slug: encodeURIComponent(`${storeName}-${toSlug(newMenu.name)}`), // slug(하이픈)
@@ -206,7 +206,7 @@ export default function MenuTab() {
     try {
       // WooCommerce에서 전체 상품 목록 불러오기
       const res = await axios.get(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products`,
         { headers: wooHeaders }
       );
 
@@ -221,7 +221,7 @@ export default function MenuTab() {
       } else if (matched.id) {
         console.log('🗑 삭제 대상 Woo 상품:', matched);
         await axios.delete(
-          `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/${matched.id}?force=true`,
+          `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/${matched.id}?force=true`,
           { headers: wooHeaders }
         );
       }
@@ -231,7 +231,7 @@ export default function MenuTab() {
 
       // 삭제 후 최신 메뉴 목록 재조회
       const refreshRes = await axios.get(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products`,
         { headers: wooHeaders }
       );
       // 기존과 동일한 필터 적용
@@ -286,7 +286,7 @@ export default function MenuTab() {
       const categoryName = `${storeName}_${rawCategoryName}`;
       const categorySlug = encodeURIComponent(`${storeName}-${toSlug(rawCategoryName)}`);
       await axios.post(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/categories`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/categories`,
         { name: categoryName, slug: categorySlug },
         { headers: wooHeaders }
       );
@@ -312,7 +312,7 @@ export default function MenuTab() {
 
     try {
       const res = await axios.get(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/categories`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/categories`,
         { headers: wooHeaders }
       );
 
@@ -340,7 +340,7 @@ export default function MenuTab() {
 
       // ✅ 1. 해당 카테고리에 연결된 상품 있는지 확인
       const productRes = await axios.get(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products`,
         { headers: wooHeaders }
       );
       const hasLinkedProduct = productRes.data.some(p =>
@@ -356,7 +356,7 @@ export default function MenuTab() {
       // ✅ 2. WooCommerce에서 카테고리 삭제 (force=true 추가)
       console.log('❌ 카테고리 삭제 요청 전 matched ID:', matched.id);
       await axios.delete(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/categories/${matched.id}?force=true`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/categories/${matched.id}?force=true`,
         { headers: wooHeaders }
       );
 
@@ -388,7 +388,7 @@ export default function MenuTab() {
     try {
       // WooCommerce 상품 ID 찾기
       const res = await axios.get(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products`,
         { headers: wooHeaders }
       );
       const storeName = getCurrentStoreName();
@@ -407,7 +407,7 @@ export default function MenuTab() {
       if (editMenu.category) {
         const categoryName = `${storeName}_${editMenu.category}`;
         const categoryListRes = await axios.get(
-          `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/categories?search=${categoryName}`,
+          `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/categories?search=${categoryName}`,
           { headers: wooHeaders }
         );
         const matchedCategory = categoryListRes.data.find(c => c.name === categoryName);
@@ -415,7 +415,7 @@ export default function MenuTab() {
       }
       // 상품 수정
       await axios.put(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/${matched.id}`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/${matched.id}`,
         {
           name: editMenu.name,
           regular_price: editMenu.price.toString(),
@@ -447,7 +447,7 @@ export default function MenuTab() {
       const newFullName = `${storeName}_${editCategory}`;
       // WooCommerce 카테고리 ID 찾기
       const res = await axios.get(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/categories`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/categories`,
         { headers: wooHeaders }
       );
       const matched = res.data.find(c => decodeURIComponent(c.name) === oldFullName);
@@ -457,7 +457,7 @@ export default function MenuTab() {
       }
       // 카테고리명/슬러그 수정
       await axios.put(
-        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/categories/${matched.id}`,
+        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/categories/${matched.id}`,
         { name: newFullName, slug: encodeURIComponent(`${storeName}-${toSlug(editCategory)}`) },
         { headers: wooHeaders }
       );
@@ -575,7 +575,7 @@ export default function MenuTab() {
                       const updated = { ...menus[idx], ...editRow };
                       // WooCommerce 상품 ID 찾기
                       const res = await axios.get(
-                        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products`,
+                        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products`,
                         { headers: wooHeaders }
                       );
                       const storeName = getCurrentStoreName();
@@ -593,7 +593,7 @@ export default function MenuTab() {
                       if (editRow.category) {
                         const categoryName = `${storeName}_${editRow.category}`;
                         const categoryListRes = await axios.get(
-                          `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/categories?search=${categoryName}`,
+                          `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/categories?search=${categoryName}`,
                           { headers: wooHeaders }
                         );
                         const matchedCategory = categoryListRes.data.find(c => c.name === categoryName);
@@ -601,7 +601,7 @@ export default function MenuTab() {
                       }
                       // 상품 수정
                       await axios.put(
-                        `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/${matched.id}`,
+                        `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/${matched.id}`,
                         {
                           name: editRow.name,
                           regular_price: editRow.price.toString(),

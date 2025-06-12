@@ -30,7 +30,7 @@ export default function StoreInfoTab({ tableCount, setTableCount, orders = [], f
     const email = localStorage.getItem('user_email');
     console.log("📌 사용자 이메일:", email);
     if (email) {
-      axios.get(`${import.meta.env.VITE_API_URL}/api/user-info?email=${email}`)
+      axios.get(`${import.meta.env.VITE_API_URL}/custom/v1/user-by-email?email=${email}`)
         .then(res => {
           const meta = res.data.meta || {};
           // userInfo 응답 데이터 확인
@@ -101,7 +101,7 @@ export default function StoreInfoTab({ tableCount, setTableCount, orders = [], f
 
     try {
       // 1. 사용자 정보 업데이트
-      await axios.post('http://localhost:5001/api/update-user-info', updateData);
+      await axios.post(`/api/update-user-info`, updateData);
 
       // 2. 워드프레스 카테고리/메뉴 일괄 동기화 (가게명 변경 시)
       if (prevStoreName && newStoreName && prevStoreName !== newStoreName) {
@@ -111,7 +111,7 @@ export default function StoreInfoTab({ tableCount, setTableCount, orders = [], f
         };
         // 2-1. 모든 카테고리 조회
         const catRes = await axios.get(
-          `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/categories`,
+          `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/categories`,
           { headers: wooHeaders }
         );
         // 2-2. 이전 가게명으로 시작하는 카테고리만 필터링
@@ -127,14 +127,14 @@ export default function StoreInfoTab({ tableCount, setTableCount, orders = [], f
           const categoryName = oldName.replace(prevPrefix, newPrefix);
           const categorySlug = oldSlug.replace(prevSlugPrefix, newSlugPrefix);
           await axios.put(
-            `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/categories/${cat.id}`,
+            `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/categories/${cat.id}`,
             { name: categoryName, slug: categorySlug },
             { headers: wooHeaders }
           );
         }
         // 2-4. 모든 상품(메뉴) 조회
         const prodRes = await axios.get(
-          `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products?per_page=100`,
+          `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products?per_page=100`,
           { headers: wooHeaders }
         );
         // 2-5. 각 상품의 카테고리 연결도 새 카테고리로 재연결
@@ -149,7 +149,7 @@ export default function StoreInfoTab({ tableCount, setTableCount, orders = [], f
           if (!newCat) continue;
           // 상품의 카테고리 연결을 새 카테고리로 변경
           await axios.put(
-            `${import.meta.env.VITE_SITE_URL}/wp-json/wc/v3/products/${product.id}`,
+            `${import.meta.env.VITE_API_URL}/wp-json/wc/v3/products/${product.id}`,
             { categories: [{ id: newCat.id }] },
             { headers: wooHeaders }
           );
@@ -157,7 +157,7 @@ export default function StoreInfoTab({ tableCount, setTableCount, orders = [], f
       }
 
       // 3. 사용자 정보 재조회 및 상태 반영
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/user-info?email=${email}`);
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/custom/v1/user-by-email?email=${email}`);
       const meta = res.data.meta || {};
       const parsedMenus = typeof meta.menus === 'string' ? JSON.parse(meta.menus) : (meta.menus || []);
       const parsedCategories = typeof meta.categories === 'string' ? JSON.parse(meta.categories) : (meta.categories || []);

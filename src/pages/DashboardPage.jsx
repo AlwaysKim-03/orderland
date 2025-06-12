@@ -21,7 +21,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const email = localStorage.getItem('user_email');
     if (email) {
-      axios.get(`${import.meta.env.VITE_API_URL}/api/user-info?email=${email}`)
+      axios.get(`${import.meta.env.VITE_API_URL}/custom/v1/user-by-email?email=${email}`)
         .then(res => {
           const userData = res.data;
           const meta = userData.meta || {};
@@ -59,9 +59,7 @@ export default function DashboardPage() {
     if (!email) return;
 
     try {
-      console.log('💾 저장 직전 menuList:', menuList);
-      console.log('💾 저장 직전 categories:', categories);
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/update-user-info`, {
+      await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/update-user-info`, {
         email,
         meta: {
           menus: JSON.stringify(menuList),
@@ -69,9 +67,7 @@ export default function DashboardPage() {
           tableCount
         }
       });
-      console.log('메뉴 정보 저장 완료');
     } catch (err) {
-      console.error('메뉴 정보 저장 실패:', err);
       alert('메뉴 정보 저장에 실패했습니다.');
     }
   };
@@ -105,7 +101,7 @@ export default function DashboardPage() {
         totalAmount,
         status: '신규'
       };
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/orders`, orderData);
+      await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/orders`, orderData);
       await fetchOrders();
       alert('주문이 추가되었습니다!');
     } catch (err) {
@@ -116,7 +112,7 @@ export default function DashboardPage() {
   // 주문 상태 업데이트 함수
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/orders/update-order`, {
+      await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/orders/update-order`, {
         orderId,
         status: newStatus
       });
@@ -130,7 +126,7 @@ export default function DashboardPage() {
   const fetchOrders = async () => {
     const storeSlug = toSlug(localStorage.getItem('restaurantName'));
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/orders/store/${storeSlug}`);
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/custom/v1/orders?storeSlug=${storeSlug}`);
       // 주문 데이터 정규화
       const normalizedOrders = (res.data || []).map(order => ({
         ...order,
@@ -153,7 +149,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchCalls = async () => {
       try {
-        const res = await axios.get('https://happyfabric02.mycafe24.com/wp-json/wp/v2/call_request', {
+        const res = await axios.get('/api/call_request', {
           params: { per_page: 20, order: 'desc' }
         });
         setCallRequests(res.data);
@@ -227,7 +223,7 @@ export default function DashboardPage() {
                   })()}
                   <button
                     onClick={async () => {
-                      await axios.delete(`https://happyfabric02.mycafe24.com/wp-json/custom/v1/call/${call.id}`);
+                      await axios.delete(`${import.meta.env.VITE_API_URL}/custom/v1/call/${call.id}`);
                       setCallRequests(prev => prev.filter(c => c.id !== call.id));
                     }}
                     style={{

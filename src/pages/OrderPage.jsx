@@ -246,7 +246,7 @@ export default function OrderPage() {
 
   const handleCallStaff = async () => {
     try {
-      await axios.post('https://happyfabric02.mycafe24.com/wp-json/custom/v1/call', {
+      await axios.post('/api/custom/v1/call', {
         storeSlug,
         tableNumber: params.tableId,
         timestamp: new Date().toISOString()

@@ -1,14 +1,14 @@
 import axios from 'axios';
 
-console.log("✅ .env 확인 - SITE_URL:", import.meta.env.VITE_SITE_URL);
+console.log("✅ .env 확인 - SITE_URL:", import.meta.env.VITE_API_URL);
 console.log("✅ .env 확인 - WC_ADMIN_KEY:", import.meta.env.VITE_WC_ADMIN_KEY);
 
-const baseURL = import.meta.env.VITE_SITE_URL;
+const baseURL = import.meta.env.VITE_API_URL;
 const consumerKey = import.meta.env.VITE_WC_PUBLIC_KEY;
 const consumerSecret = import.meta.env.VITE_WC_PUBLIC_SECRET;
 
 const WooAPI = axios.create({
-  baseURL: `${baseURL}/wp-json/wc/v3`,
+  baseURL: `${baseURL}/wc/v3`,
   auth: {
     username: consumerKey,
     password: consumerSecret

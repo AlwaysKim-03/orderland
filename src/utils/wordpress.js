@@ -8,7 +8,7 @@ const sanitize = (str) => {
 // 워드프레스 REST API 인증 정보 (Vite 환경변수 사용)
 const WC_ADMIN_KEY = import.meta.env.VITE_WC_ADMIN_KEY;
 const WC_ADMIN_SECRET = import.meta.env.VITE_WC_ADMIN_SECRET;
-const WC_SITE_URL = import.meta.env.VITE_SITE_URL || "https://happyfabric02.mycafe24.com";
+const WC_SITE_URL = import.meta.env.VITE_API_URL || "https://happyfabric02.mycafe24.com/wp-json";
 
 // 카테고리 생성 함수
 export async function createCategory({ storeInfo, category }) {
@@ -20,7 +20,7 @@ export async function createCategory({ storeInfo, category }) {
   const categorySlug = `${cleanStoreName}-${cleanCategoryName}`.toLowerCase();
 
   // 중복 카테고리 존재 여부 확인
-  const existing = await axios.get(`${WC_SITE_URL}/wp-json/wc/v3/products/categories`, {
+  const existing = await axios.get(`${WC_SITE_URL}/wc/v3/products/categories`, {
     auth: {
       username: WC_ADMIN_KEY,
       password: WC_ADMIN_SECRET
@@ -32,7 +32,7 @@ export async function createCategory({ storeInfo, category }) {
 
   // 존재하지 않을 때만 새 카테고리 생성
   if (existing.data.length === 0) {
-    await axios.post(`${WC_SITE_URL}/wp-json/wc/v3/products/categories`, {
+    await axios.post(`${WC_SITE_URL}/wc/v3/products/categories`, {
       name: categoryName,
       slug: categorySlug
     }, {

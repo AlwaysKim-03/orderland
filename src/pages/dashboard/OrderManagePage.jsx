@@ -44,7 +44,7 @@ function OrderDetailModal({ isOpen, onClose, orders = [], menuList, tableNumber,
       alert('테이블 번호가 올바르지 않습니다.');
       return;
     }
-    await axios.post('http://localhost:5001/api/orders', {
+    await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/orders`, {
       storeSlug,
       tableNumber,
       orders: [{ name: menu.name, price: menu.regular_price, quantity: qty }],
@@ -59,7 +59,7 @@ function OrderDetailModal({ isOpen, onClose, orders = [], menuList, tableNumber,
     for (const order of orders) {
       const oid = order.id || order.order_id;
       if (!oid) continue;
-      await axios.post('http://localhost:5001/api/orders/delete-order', { orderId: oid });
+      await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/orders/delete-order`, { orderId: oid });
     }
     if (fetchOrders) await fetchOrders();
     onClose();
@@ -167,16 +167,16 @@ export default function OrderManagePage({ tableCount = 10, setTableCount, fetchO
     const fetchMenus = async () => {
       try {
         // 1. accountId 얻기
-        const idRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/get-account-id?storeName=${encodeURIComponent(storeSlug)}`);
+        const idRes = await axios.get(`${import.meta.env.VITE_API_URL}/custom/v1/get-account-id?storeName=${encodeURIComponent(storeSlug)}`);
         const accountId = idRes.data?.accountId;
         if (!accountId) return;
         // 2. 카테고리 목록 얻기
-        const catRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/get-categories-by-store?accountId=${accountId}`);
+        const catRes = await axios.get(`${import.meta.env.VITE_API_URL}/custom/v1/get-categories-by-store?accountId=${accountId}`);
         const categories = catRes.data;
         // 3. 모든 카테고리의 상품 합치기
         let allMenus = [];
         for (const cat of categories) {
-          const prodRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/get-products-by-category?slug=${cat.slug}`);
+          const prodRes = await axios.get(`${import.meta.env.VITE_API_URL}/custom/v1/get-products-by-category?slug=${cat.slug}`);
           allMenus = allMenus.concat(prodRes.data);
         }
         setMenuList(allMenus);
@@ -208,7 +208,7 @@ export default function OrderManagePage({ tableCount = 10, setTableCount, fetchO
           totalAmount,
           status: '진행중'
         };
-        await axios.post('http://localhost:5001/api/orders', payload);
+        await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/orders`, payload);
       } else {
         const payload = {
           orderId: order.id || order.order_id,
@@ -218,7 +218,7 @@ export default function OrderManagePage({ tableCount = 10, setTableCount, fetchO
           storeSlug: encodeURIComponent(storeSlug),
           status: '진행중'
         };
-        await axios.post('http://localhost:5001/api/orders/update-order', payload);
+        await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/orders/update-order`, payload);
       }
       if (fetchOrders) await fetchOrders();
     } catch (err) {
@@ -235,7 +235,7 @@ export default function OrderManagePage({ tableCount = 10, setTableCount, fetchO
         orderId: order.id || order.order_id,
         storeSlug: encodeURIComponent(storeSlug),
       };
-      await axios.post('http://localhost:5001/api/orders/delete-order', payload);
+      await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/orders/delete-order`, payload);
       if (fetchOrders) await fetchOrders();
     } catch (err) {
       alert('주문 삭제 실패: ' + (err.response?.data?.message || err.message));
