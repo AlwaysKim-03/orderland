@@ -26,7 +26,7 @@ export default function OrderTab({ tableCount, setTableCount }) {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const res = await axios.get(`http://localhost:5001/api/orders/store/${storeSlug}`);
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/orders/store/${storeSlug}`);
         setOrders(res.data);
       } catch (err) {
         // 에러 무시
@@ -45,9 +45,9 @@ export default function OrderTab({ tableCount, setTableCount }) {
   // 주문 삭제
   const handleDeleteOrder = async (orderId) => {
     try {
-      await axios.delete(`http://localhost:5001/api/orders/${orderId}`);
+      await axios.delete(`${import.meta.env.VITE_API_URL}/api/orders/${orderId}`);
       // 삭제 후 목록 새로고침
-      const res = await axios.get(`http://localhost:5001/api/orders/store/${storeSlug}`);
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/orders/store/${storeSlug}`);
       setOrders(res.data);
     } catch (err) {
       alert('주문 삭제 실패');
@@ -66,13 +66,13 @@ export default function OrderTab({ tableCount, setTableCount }) {
       quantity: 1
     }));
     try {
-      await axios.post('http://localhost:5001/api/orders', {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/orders`, {
         storeSlug,
         tableNumber: getTableKey(storeSlug, tableNumber),
         orders: ordersArr,
         totalAmount: ordersArr.reduce((sum, item) => sum + item.price * item.quantity, 0)
       });
-      const res = await axios.get(`http://localhost:5001/api/orders/store/${storeSlug}`);
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/orders/store/${storeSlug}`);
       setOrders(res.data);
       setNewOrder({ menuItems: [], totalAmount: 0 });
       setSelectedTable(null);

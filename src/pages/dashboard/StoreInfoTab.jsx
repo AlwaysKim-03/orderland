@@ -30,7 +30,7 @@ export default function StoreInfoTab({ tableCount, setTableCount, orders = [], f
     const email = localStorage.getItem('user_email');
     console.log("📌 사용자 이메일:", email);
     if (email) {
-      axios.get(`http://localhost:5001/api/user-info?email=${email}`)
+      axios.get(`${import.meta.env.VITE_API_URL}/api/user-info?email=${email}`)
         .then(res => {
           const meta = res.data.meta || {};
           // userInfo 응답 데이터 확인
@@ -157,7 +157,7 @@ export default function StoreInfoTab({ tableCount, setTableCount, orders = [], f
       }
 
       // 3. 사용자 정보 재조회 및 상태 반영
-      const res = await axios.get(`http://localhost:5001/api/user-info?email=${email}`);
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/user-info?email=${email}`);
       const meta = res.data.meta || {};
       const parsedMenus = typeof meta.menus === 'string' ? JSON.parse(meta.menus) : (meta.menus || []);
       const parsedCategories = typeof meta.categories === 'string' ? JSON.parse(meta.categories) : (meta.categories || []);

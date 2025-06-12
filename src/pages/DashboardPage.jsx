@@ -21,7 +21,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const email = localStorage.getItem('user_email');
     if (email) {
-      axios.get(`http://localhost:5001/api/user-info?email=${email}`)
+      axios.get(`${import.meta.env.VITE_API_URL}/api/user-info?email=${email}`)
         .then(res => {
           const userData = res.data;
           const meta = userData.meta || {};
@@ -61,7 +61,7 @@ export default function DashboardPage() {
     try {
       console.log('💾 저장 직전 menuList:', menuList);
       console.log('💾 저장 직전 categories:', categories);
-      await axios.post('http://localhost:5001/api/update-user-info', {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/update-user-info`, {
         email,
         meta: {
           menus: JSON.stringify(menuList),
@@ -105,7 +105,7 @@ export default function DashboardPage() {
         totalAmount,
         status: '신규'
       };
-      await axios.post('http://localhost:5001/api/orders', orderData);
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/orders`, orderData);
       await fetchOrders();
       alert('주문이 추가되었습니다!');
     } catch (err) {
@@ -116,7 +116,7 @@ export default function DashboardPage() {
   // 주문 상태 업데이트 함수
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
-      await axios.post('http://localhost:5001/api/orders/update-order', {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/orders/update-order`, {
         orderId,
         status: newStatus
       });
@@ -130,7 +130,7 @@ export default function DashboardPage() {
   const fetchOrders = async () => {
     const storeSlug = toSlug(localStorage.getItem('restaurantName'));
     try {
-      const res = await axios.get(`http://localhost:5001/api/orders/store/${storeSlug}`);
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/orders/store/${storeSlug}`);
       // 주문 데이터 정규화
       const normalizedOrders = (res.data || []).map(order => ({
         ...order,

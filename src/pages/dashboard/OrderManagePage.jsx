@@ -167,16 +167,16 @@ export default function OrderManagePage({ tableCount = 10, setTableCount, fetchO
     const fetchMenus = async () => {
       try {
         // 1. accountId 얻기
-        const idRes = await axios.get(`http://localhost:5001/api/get-account-id?storeName=${encodeURIComponent(storeSlug)}`);
+        const idRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/get-account-id?storeName=${encodeURIComponent(storeSlug)}`);
         const accountId = idRes.data?.accountId;
         if (!accountId) return;
         // 2. 카테고리 목록 얻기
-        const catRes = await axios.get(`http://localhost:5001/api/get-categories-by-store?accountId=${accountId}`);
+        const catRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/get-categories-by-store?accountId=${accountId}`);
         const categories = catRes.data;
         // 3. 모든 카테고리의 상품 합치기
         let allMenus = [];
         for (const cat of categories) {
-          const prodRes = await axios.get(`http://localhost:5001/api/get-products-by-category?slug=${cat.slug}`);
+          const prodRes = await axios.get(`${import.meta.env.VITE_API_URL}/api/get-products-by-category?slug=${cat.slug}`);
           allMenus = allMenus.concat(prodRes.data);
         }
         setMenuList(allMenus);
