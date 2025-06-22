@@ -255,9 +255,8 @@ function OrderDetailModal({ isOpen, onClose, orders, tableNumber, storeId }) {
   );
 }
 
-export default function OrderManagePage({ orders: allOrders = [] }) {
+export default function OrderManagePage({ orders: allOrders = [], userInfo, onUserUpdate }) {
   const [currentUser, setCurrentUser] = useState(null);
-  const [userInfo, setUserInfo] = useState(null);
   const [selectedTable, setSelectedTable] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const tableCount = userInfo?.tableCount || 0;
@@ -277,23 +276,6 @@ export default function OrderManagePage({ orders: allOrders = [] }) {
     return () => unsubscribe();
   }, []);
   
-  const fetchUserInfo = useCallback(async () => {
-    if (!currentUser) return;
-    try {
-      const userDocRef = doc(db, "users", currentUser.uid);
-      const userDocSnap = await getDoc(userDocRef);
-      if (userDocSnap.exists()) {
-        setUserInfo(userDocSnap.data());
-      }
-    } catch (error) {
-      console.error("사용자 정보 불러오기 실패:", error);
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
-    fetchUserInfo();
-  }, [fetchUserInfo]);
-
   // 테이블별로 주문 필터링 ('completed' 아닌 것만)
   const getTableOrders = useCallback((tableNumber) => {
     return allOrders
@@ -341,7 +323,9 @@ export default function OrderManagePage({ orders: allOrders = [] }) {
       const userDocRef = doc(db, "users", currentUser.uid);
       await updateDoc(userDocRef, { tableCount: newCount });
       alert('테이블 수가 저장되었습니다.');
-      fetchUserInfo(); // Re-fetch to confirm update
+      if (onUserUpdate) {
+        onUserUpdate();
+      }
     } catch (error) {
       console.error('테이블 수 저장 실패:', error);
       alert('테이블 수 저장에 실패했습니다.');

@@ -9,56 +9,27 @@ function toSlug(str) {
   return String(str).trim().replace(/\s+/g, '-');
 }
 
-export default function StoreInfoTab({ onStoreUpdate }) {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [userInfo, setUserInfo] = useState(null);
+export default function StoreInfoTab({ userInfo, onStoreUpdate }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     store_name: '',
     phone: '',
     tableCount: 1
   });
-  const [loading, setLoading] = useState(true);
-  
-  // QR 코드 다운로드를 위한 ref 배열 생성
-  const qrCodeRefs = useRef([]);
 
+  // userInfo가 업데이트되면 form 상태를 동기화
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(user => {
-      setCurrentUser(user);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  const fetchUserInfo = useCallback(async () => {
-    if (!currentUser) return;
-    setLoading(true);
-    try {
-      const userDocRef = doc(db, "users", currentUser.uid);
-      const userDocSnap = await getDoc(userDocRef);
-      if (userDocSnap.exists()) {
-        const userData = userDocSnap.data();
-        setUserInfo(userData);
-        setForm({
-          store_name: userData.store_name || '',
-          phone: userData.phone || '',
-          tableCount: userData.tableCount || 1
-        });
-      } else {
-        console.log("사용자 문서가 존재하지 않습니다.");
-      }
-    } catch (error) {
-      console.error("사용자 정보 불러오기 실패:", error);
-    } finally {
-      setLoading(false);
+    if (userInfo) {
+      setForm({
+        store_name: userInfo.store_name || '',
+        phone: userInfo.phone || '',
+        tableCount: userInfo.tableCount || 1
+      });
     }
-  }, [currentUser]);
-
-  useEffect(() => {
-    fetchUserInfo();
-  }, [fetchUserInfo]);
+  }, [userInfo]);
 
   const handleUpdate = async () => {
+    const currentUser = auth.currentUser;
     if (!currentUser) return alert('로그인이 필요합니다.');
     
     try {
@@ -70,9 +41,8 @@ export default function StoreInfoTab({ onStoreUpdate }) {
       });
       alert('가게 정보가 성공적으로 수정되었습니다.');
       setEditing(false);
-      fetchUserInfo();
       if (onStoreUpdate) {
-        onStoreUpdate();
+        onStoreUpdate(); // 부모 컴포넌트에 데이터 리프레시 요청
       }
     } catch (err) {
       console.error('가게 정보 수정 실패:', err);
@@ -93,12 +63,9 @@ export default function StoreInfoTab({ onStoreUpdate }) {
   }, [storeSlug, form.tableCount]);
 
   const handleDownload = (index) => {
-    // ID를 사용해 특정 캔버스 요소를 찾습니다.
     const canvas = document.getElementById(`qr-canvas-${index}`);
     if (canvas) {
-      const pngUrl = canvas
-        .toDataURL("image/png")
-        .replace("image/png", "image/octet-stream");
+      const pngUrl = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
       let downloadLink = document.createElement("a");
       downloadLink.href = pngUrl;
       downloadLink.download = `${storeSlug}-table-${index + 1}-qr.png`;
@@ -110,7 +77,7 @@ export default function StoreInfoTab({ onStoreUpdate }) {
     }
   };
 
-  if (loading) {
+  if (!userInfo) {
     return <div>가게 정보를 불러오는 중...</div>;
   }
   
@@ -129,9 +96,9 @@ export default function StoreInfoTab({ onStoreUpdate }) {
         </div>
       ) : (
         <div>
-          <p><strong>가게명:</strong> {userInfo?.store_name}</p>
-          <p><strong>전화번호:</strong> {userInfo?.phone}</p>
-          <p><strong>테이블 수:</strong> {userInfo?.tableCount}</p>
+          <p><strong>가게명:</strong> {userInfo.store_name}</p>
+          <p><strong>전화번호:</strong> {userInfo.phone}</p>
+          <p><strong>테이블 수:</strong> {userInfo.tableCount}</p>
         </div>
       )}
 

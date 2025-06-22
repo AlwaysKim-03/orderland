@@ -5,7 +5,7 @@ import SalesTab from './dashboard/SalesTab';
 import MenuTab from './dashboard/MenuTab';
 import OrderManagePage from './dashboard/OrderManagePage';
 import { db, auth } from '../firebase';
-import { collection, query, where, onSnapshot, doc, getDoc, updateDoc, writeBatch, getDocs, deleteDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, getDoc, updateDoc, writeBatch, getDocs, deleteDoc, orderBy } from "firebase/firestore";
 import { signOut, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 
 export default function DashboardPage() {
@@ -16,76 +16,106 @@ export default function DashboardPage() {
   const [currentUser, setCurrentUser] = useState(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
-  // 1. 현재 사용자 정보 가져오기
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(user => {
-      setCurrentUser(user);
-    });
-    return () => unsubscribe();
-  }, []);
+  // --- 모든 탭의 데이터를 관리하는 상태 ---
+  const [userInfo, setUserInfo] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 2. 가게 정보(이름) 가져오기
-  const fetchStoreInfo = useCallback(async () => {
-    if (!currentUser) return;
+
+  // --- 데이터 로딩 함수들 ---
+  const fetchAllData = useCallback(async (user) => {
+    if (!user) return;
+    setIsLoading(true);
+
     try {
-      const userDocRef = doc(db, "users", currentUser.uid);
+      // 1. 유저 정보 (가게 정보 포함)
+      const userDocRef = doc(db, "users", user.uid);
       const userDocSnap = await getDoc(userDocRef);
       if (userDocSnap.exists()) {
         const userData = userDocSnap.data();
+        setUserInfo(userData);
         setRestaurantName(userData.store_name || '내 매장');
       }
+
+      // 2. 카테고리
+      const catQuery = query(collection(db, "categories"), where("storeId", "==", user.uid), orderBy("createdAt"));
+      const catSnapshot = await getDocs(catQuery);
+      const fetchedCategories = catSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setCategories(fetchedCategories);
+      
+      // 3. 상품
+      const prodQuery = query(collection(db, "products"), where("storeId", "==", user.uid));
+      const prodSnapshot = await getDocs(prodQuery);
+      const fetchedProducts = prodSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setProducts(fetchedProducts);
+
     } catch (error) {
-      console.error("가게 정보 불러오기 실패:", error);
+      console.error("초기 데이터 로딩 실패:", error);
+    } finally {
+      setIsLoading(false);
     }
-  }, [currentUser]);
+  }, []);
 
-  // 3. 주문 내역 실시간으로 가져오기
-  const setupOrderListener = useCallback(() => {
-    if (!currentUser) return null;
-    const q = query(collection(db, "orders"), where("storeId", "==", currentUser.uid));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setOrders(fetchedOrders);
-    });
-    return unsubscribe;
-  }, [currentUser]);
-
-  // 4. 직원 호출 실시간으로 가져오기
-  const setupCallListener = useCallback(() => {
-    if (!currentUser) return null;
-    const q = query(collection(db, "staff_calls"), where("storeId", "==", currentUser.uid), where("status", "==", "new"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedCalls = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setCallRequests(fetchedCalls);
-    });
-    return unsubscribe;
-  }, [currentUser]);
-
-  // 5. 직원 호출 확인 처리
-  const handleAcknowledgeCall = async (callId) => {
-    try {
-      const callDocRef = doc(db, "staff_calls", callId);
-      await updateDoc(callDocRef, {
-        status: 'acknowledged'
-      });
-    } catch (error) {
-      console.error("직원 호출 확인 처리 실패:", error);
-      alert('호출 확인 처리에 실패했습니다.');
-    }
-  };
-
+  // --- 실시간 리스너 설정 ---
   useEffect(() => {
-    if (currentUser) {
-      fetchStoreInfo();
-      const unsubscribeOrders = setupOrderListener();
-      const unsubscribeCalls = setupCallListener();
+    const unsubscribeAuth = auth.onAuthStateChanged(user => {
+      setCurrentUser(user);
+      if (user) {
+        fetchAllData(user); // 데이터 한번에 불러오기
 
-      return () => {
-        if (unsubscribeOrders) unsubscribeOrders();
-        if (unsubscribeCalls) unsubscribeCalls();
-      };
+        // 실시간 주문/호출 리스너 설정
+        const unsubOrders = onSnapshot(query(collection(db, "orders"), where("storeId", "==", user.uid)), (snapshot) => {
+          setOrders(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+        const unsubCalls = onSnapshot(query(collection(db, "staff_calls"), where("storeId", "==", user.uid), where("status", "==", "new")), (snapshot) => {
+          setCallRequests(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+
+        // 컴포넌트 언마운트 시 리스너 해제
+        return () => {
+          unsubOrders();
+          unsubCalls();
+        };
+      } else {
+        // 로그아웃 시 상태 초기화
+        setCurrentUser(null);
+        setUserInfo(null);
+        setOrders([]);
+        setCallRequests([]);
+        setCategories([]);
+        setProducts([]);
+        setIsLoading(false);
+      }
+    });
+    return () => unsubscribeAuth();
+  }, [fetchAllData]);
+
+  // --- 데이터 수동 리프레시 함수 ---
+  const refreshStoreInfo = useCallback(() => {
+    if (currentUser) {
+      const userDocRef = doc(db, "users", currentUser.uid);
+      getDoc(userDocRef).then(userDocSnap => {
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data();
+          setUserInfo(userData);
+          setRestaurantName(userData.store_name || '내 매장');
+        }
+      });
     }
-  }, [currentUser, fetchStoreInfo, setupOrderListener, setupCallListener]);
+  }, [currentUser]);
+
+  const refreshMenuData = useCallback(async () => {
+    if (currentUser) {
+      const catQuery = query(collection(db, "categories"), where("storeId", "==", currentUser.uid), orderBy("createdAt"));
+      const catSnapshot = await getDocs(catQuery);
+      setCategories(catSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+
+      const prodQuery = query(collection(db, "products"), where("storeId", "==", currentUser.uid));
+      const prodSnapshot = await getDocs(prodQuery);
+      setProducts(prodSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
+  }, [currentUser]);
 
 
   // --- 데이터 및 계정 삭제 로직 (보안 강화) ---
@@ -189,25 +219,32 @@ export default function DashboardPage() {
     }
   };
 
+  const handleAcknowledgeCall = async (callId) => {
+    try {
+      const callDocRef = doc(db, "staff_calls", callId);
+      await updateDoc(callDocRef, {
+        status: 'acknowledged'
+      });
+    } catch (error) {
+      console.error("직원 호출 확인 처리 실패:", error);
+      alert('호출 확인 처리에 실패했습니다.');
+    }
+  };
+
   const renderContent = () => {
-    // 이제 각 탭은 더 이상 props를 내려받을 필요가 없습니다. 
-    // 각 탭 컴포넌트가 직접 Firestore에서 데이터를 가져오는 것이 더 효율적입니다.
-    // 하지만 우선은 기존 구조를 최대한 유지하여 수정합니다.
+    if (isLoading) {
+      return <div>데이터를 불러오는 중...</div>;
+    }
+    
     switch (activeTab) {
       case 'store':
-        return <StoreInfoTab onStoreUpdate={fetchStoreInfo} />;
+        return <StoreInfoTab userInfo={userInfo} onStoreUpdate={refreshStoreInfo} />;
       case 'orders':
-        return (
-          <OrderManagePage
-            orders={orders}
-            restaurantName={restaurantName}
-          />
-        );
+        return <OrderManagePage orders={orders} userInfo={userInfo} onUserUpdate={refreshStoreInfo} />;
       case 'sales':
-        return <SalesTab orders={orders} />;
+        return <SalesTab />;
       case 'menu':
-        // MenuTab은 자체적으로 데이터를 불러오므로 props가 필요 없습니다.
-        return <MenuTab />;
+        return <MenuTab categories={categories} products={products} onMenuUpdate={refreshMenuData} />;
       default:
         return null;
     }
