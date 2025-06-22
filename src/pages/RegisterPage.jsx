@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { registerUser } from "../api/wordpress";
+import { auth, db } from "../firebase"; // Firebase auth 및 db 객체 가져오기
+import { createUserWithEmailAndPassword } from "firebase/auth"; // Firebase 회원가입 함수
+import { doc, setDoc } from "firebase/firestore"; // Firestore 데이터 저장 함수
 import "./RegisterPage.css";
 
 function RegisterPage() {
@@ -35,21 +37,39 @@ function RegisterPage() {
       return;
     }
     try {
-      await registerUser({ ...formData });
-      // 회원가입 성공 후 orderHistory_로 시작하는 localStorage 키 모두 삭제
+      // 1. Firebase Authentication으로 사용자 생성
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        formData.email,
+        formData.password
+      );
+      const user = userCredential.user;
+
+      // 2. Firestore에 추가 정보 저장
+      await setDoc(doc(db, "users", user.uid), {
+        name: formData.name,
+        phone: formData.phone,
+        store_name: formData.store_name,
+        store_address: formData.store_address,
+        email: formData.email,
+      });
+
+      // 회원가입 성공 후 처리
       Object.keys(localStorage).forEach(key => {
         if (key.startsWith('orderHistory_')) {
           localStorage.removeItem(key);
         }
       });
-      // 가게명 동기화 (원본 그대로 저장)
+      // 가게명 동기화 (필요하다면 유지, 하지만 Firestore에서 관리하는 것이 더 좋음)
       localStorage.setItem('restaurantName', formData.store_name);
       localStorage.setItem('storeName', formData.store_name);
       localStorage.setItem('storeInfo', JSON.stringify({ storeName: formData.store_name }));
-      alert("회원가입 성공");
+      
+      alert("회원가입 성공!");
       navigate("/login");
     } catch (err) {
-      alert("회원가입 실패: " + (err.response?.data?.message || err.message));
+      console.error("Firebase 회원가입 실패:", err);
+      alert("회원가입 실패: " + err.message);
     }
   };
 

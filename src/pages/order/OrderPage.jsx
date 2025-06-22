@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { API_CONFIG } from '../../api/wordpress';
 
 export default function OrderPage() {
   const { storeSlug, tableId } = useParams();
@@ -25,9 +26,9 @@ export default function OrderPage() {
       try {
         setLoading(true);
         // 1. 카테고리 불러오기
-        const catRes = await axios.get(`${import.meta.env.VITE_API_URL.replace('/wp-json','')}/wp-json/custom/v1/get-categories-by-store?accountId=${accountId}`, {
+        const catRes = await axios.get(`${API_CONFIG.baseURL}/custom/v1/get-categories-by-store?accountId=${accountId}`, {
           headers: {
-            Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
+            Authorization: `Basic ${API_CONFIG.wpAuthToken}`
           }
         });
         const myCategories = catRes.data;
@@ -36,7 +37,11 @@ export default function OrderPage() {
         console.log('🔖 내 카테고리:', myCategories.map(c => c.name));
 
         // 2. 상품 불러오기 (첫 카테고리 기준)
-        const prodRes = await axios.get(`${import.meta.env.VITE_API_URL.replace('/wp-json','')}/wp-json/custom/v1/get-products-by-category?slug=${myCategories[0]?.slug}`);
+        const prodRes = await axios.get(`${API_CONFIG.baseURL}/custom/v1/get-products-by-category?slug=${myCategories[0]?.slug}`, {
+          headers: {
+            Authorization: `Basic ${API_CONFIG.wpAuthToken}`
+          }
+        });
         console.log('📦 전체 WooCommerce 상품 구조:', prodRes.data);
         // 상품에 카테고리명 추가
         const productsWithCategory = prodRes.data.map(product => {
@@ -87,38 +92,38 @@ export default function OrderPage() {
     );
   };
 
-  const handleOrderSubmit = async () => {
-    if (cart.length === 0) {
-      alert('장바구니가 비어있습니다.');
-      return;
-    }
-    setOrderLoading(true);
+  const handleSubmitOrder = async () => {
     try {
+      const storeSlug = toSlug(params.storeId);
+      const tableNumber = params.tableId;
       const orderData = {
         storeSlug,
-        tableId,
-        orders: cart.map(item => ({
+        tableNumber,
+        orders: selectedItems.map(item => ({
           name: item.name,
-          category: item.categoryName,
-          price: Number(item.regular_price),
-          quantity: Number(item.count)
+          price: item.price,
+          quantity: item.quantity,
+          category: item.categoryName
         })),
-        totalAmount: cart.reduce((sum, item) => sum + Number(item.count) * Number(item.regular_price), 0)
+        totalAmount: calculateTotal(),
+        status: '신규'
       };
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/orders`, orderData, {
-        headers: {
-          Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
+
+      await axios.post(
+        `${import.meta.env.VITE_API_URL}/custom/v1/order`,
+        orderData,
+        {
+          headers: {
+            Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
+          }
         }
-      });
-      setOrderNumber(response.data.orderNumber);
-      setLastOrder(cart);
-      alert('주문이 접수되었습니다!');
-      setCart([]);
+      );
+
+      setSelectedItems([]);
+      alert('주문이 완료되었습니다!');
     } catch (err) {
-      console.error('주문 실패:', err);
+      console.error('주문 실패:', err.response?.data || err.message);
       alert('주문에 실패했습니다. 잠시 후 다시 시도해주세요.');
-    } finally {
-      setOrderLoading(false);
     }
   };
 
@@ -291,4 +296,27 @@ export default function OrderPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <button
                   onClick={() => updateCartItemCount(item.id, item.count - 1)}
-                  aria-label={`${item.name} 수량 감소`
+                  aria-label={`${item.name} 수량 감소`}
+                >
+                  -
+                </button>
+                <span>{item.count}</span>
+                <button
+                  onClick={() => updateCartItemCount(item.id, item.count + 1)}
+                  aria-label={`${item.name} 수량 증가`}
+                >
+                  +
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        <button onClick={handleSubmitOrder} style={{ marginTop: 16, padding: '8px 16px', background: '#007bff', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>주문하기</button>
+      </div>
+
+      {/* 주문 내역 모달 */}
+      {showHistory && renderHistoryModal()}
+    </div>
+  );
+}

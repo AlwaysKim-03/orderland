@@ -6,6 +6,10 @@ const WP_API_PASSWORD = process.env.WP_API_PASSWORD;
 const WC_ADMIN_KEY = process.env.WC_ADMIN_KEY;
 const WC_ADMIN_SECRET = process.env.WC_ADMIN_SECRET;
 
+function cleanWpJsonUrl(url) {
+  return url.replace(/\/wp-json\/wp-json\//, '/wp-json/');
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -20,7 +24,7 @@ export default async function handler(req, res) {
     const { email } = req.query;
     if (!email) return res.status(400).json({ error: '이메일이 필요합니다.' });
     try {
-      const response = await axios.get(`${WP_API_URL}/custom/v1/user-by-email`, {
+      const response = await axios.get(cleanWpJsonUrl(`${WP_API_URL}/custom/v1/user-by-email`), {
         params: { email },
         auth: { username: WP_API_USERNAME, password: WP_API_PASSWORD }
       });
@@ -36,7 +40,7 @@ export default async function handler(req, res) {
     const { email, meta } = req.body;
     if (!email || !meta) return res.status(400).json({ error: '이메일과 meta 정보가 필요합니다.' });
     try {
-      const userRes = await axios.get(`${WP_API_URL}/custom/v1/user-by-email`, {
+      const userRes = await axios.get(cleanWpJsonUrl(`${WP_API_URL}/custom/v1/user-by-email`), {
         params: { email },
         auth: { username: WP_API_USERNAME, password: WP_API_PASSWORD }
       });
@@ -44,7 +48,7 @@ export default async function handler(req, res) {
       if (!userId) return res.status(404).json({ error: '사용자를 찾을 수 없습니다.' });
       if (meta.tableCount !== undefined) meta.tableCount = parseInt(meta.tableCount, 10) || 1;
       const updateRes = await axios.post(
-        `${WP_API_URL}/wp/v2/users/${userId}`,
+        cleanWpJsonUrl(`${WP_API_URL}/wp/v2/users/${userId}`),
         { meta },
         { auth: { username: WP_API_USERNAME, password: WP_API_PASSWORD } }
       );
@@ -61,7 +65,7 @@ export default async function handler(req, res) {
     if (!storeName) return res.status(400).json({ error: 'storeName이 필요합니다.' });
     try {
       storeName = decodeURIComponent(storeName);
-      const response = await axios.get(`${WP_API_URL}/wp/v2/users`, {
+      const response = await axios.get(cleanWpJsonUrl(`${WP_API_URL}/wp/v2/users`), {
         auth: { username: WP_API_USERNAME, password: WP_API_PASSWORD }
       });
       const matched = response.data.find(user => {
@@ -81,13 +85,13 @@ export default async function handler(req, res) {
     const { accountId } = req.query;
     if (!accountId) return res.status(400).json({ error: 'accountId가 필요합니다.' });
     try {
-      const userRes = await axios.get(`${WP_API_URL}/wp/v2/users/${accountId}`, {
+      const userRes = await axios.get(cleanWpJsonUrl(`${WP_API_URL}/wp/v2/users/${accountId}`), {
         auth: { username: WP_API_USERNAME, password: WP_API_PASSWORD }
       });
       const user = userRes.data;
       const restaurantName = Array.isArray(user.meta?.restaurantName) ? user.meta.restaurantName[0] : user.meta?.restaurantName || user.name || user.username;
       if (!restaurantName) return res.status(404).json({ error: '가게명을 찾을 수 없습니다.' });
-      const catRes = await axios.get(`${WP_API_URL.replace('/wp-json','')}/wp-json/wc/v3/products/categories`, {
+      const catRes = await axios.get(cleanWpJsonUrl(`${WP_API_URL.replace('/wp-json','')}/wp-json/wc/v3/products/categories`), {
         auth: { username: WC_ADMIN_KEY, password: WC_ADMIN_SECRET }
       });
       const filtered = catRes.data.filter(cat =>
@@ -105,14 +109,14 @@ export default async function handler(req, res) {
     const { slug } = req.query;
     if (!slug) return res.status(400).json({ error: 'slug가 필요합니다.' });
     try {
-      const catRes = await axios.get(`${WP_API_URL.replace('/wp-json','')}/wp-json/wc/v3/products/categories`, {
+      const catRes = await axios.get(cleanWpJsonUrl(`${WP_API_URL.replace('/wp-json','')}/wp-json/wc/v3/products/categories`), {
         auth: { username: WC_ADMIN_KEY, password: WC_ADMIN_SECRET }
       });
       const matchedCategory = catRes.data.find(cat =>
         decodeURIComponent(cat.slug) === decodeURIComponent(slug)
       );
       if (!matchedCategory) return res.status(404).json({ error: '해당 카테고리를 찾을 수 없습니다.' });
-      const prodRes = await axios.get(`${WP_API_URL.replace('/wp-json','')}/wp-json/wc/v3/products`, {
+      const prodRes = await axios.get(cleanWpJsonUrl(`${WP_API_URL.replace('/wp-json','')}/wp-json/wc/v3/products`), {
         auth: { username: WC_ADMIN_KEY, password: WC_ADMIN_SECRET }
       });
       const filtered = prodRes.data.filter(product =>
@@ -131,7 +135,7 @@ export default async function handler(req, res) {
     const { accountId, categoryName } = req.body;
     if (!accountId || !categoryName) return res.status(400).json({ error: 'accountId와 categoryName이 필요합니다.' });
     try {
-      const userRes = await axios.get(`${WP_API_URL}/wp/v2/users/${accountId}`, {
+      const userRes = await axios.get(cleanWpJsonUrl(`${WP_API_URL}/wp/v2/users/${accountId}`), {
         auth: { username: WP_API_USERNAME, password: WP_API_PASSWORD }
       });
       const user = userRes.data;
@@ -140,7 +144,7 @@ export default async function handler(req, res) {
       const fullCategoryName = `${restaurantName}_${categoryName}`;
       const fullCategorySlug = `${restaurantName}-${categoryName}`.toLowerCase();
       const createRes = await axios.post(
-        `${WP_API_URL.replace('/wp-json','')}/wp-json/wc/v3/products/categories`,
+        cleanWpJsonUrl(`${WP_API_URL.replace('/wp-json','')}/wp-json/wc/v3/products/categories`),
         { name: fullCategoryName, slug: fullCategorySlug },
         { auth: { username: WC_ADMIN_KEY, password: WC_ADMIN_SECRET } }
       );
@@ -156,7 +160,7 @@ export default async function handler(req, res) {
     try {
       const { email, menus, categories } = req.body;
       if (!email) return res.status(400).json({ error: 'email이 필요합니다.' });
-      const userRes = await axios.get(`${WP_API_URL}/custom/v1/user-by-email`, {
+      const userRes = await axios.get(cleanWpJsonUrl(`${WP_API_URL}/custom/v1/user-by-email`), {
         params: { email },
         auth: { username: WP_API_USERNAME, password: WP_API_PASSWORD }
       });
@@ -166,7 +170,7 @@ export default async function handler(req, res) {
       if (menus !== undefined) meta.menus = JSON.stringify(menus);
       if (categories !== undefined) meta.categories = JSON.stringify(categories);
       const updateRes = await axios.post(
-        `${WP_API_URL}/wp/v2/users/${userId}`,
+        cleanWpJsonUrl(`${WP_API_URL}/wp/v2/users/${userId}`),
         { meta },
         { auth: { username: WP_API_USERNAME, password: WP_API_PASSWORD } }
       );

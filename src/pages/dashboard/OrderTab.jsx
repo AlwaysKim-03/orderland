@@ -27,7 +27,7 @@ export default function OrderTab({ tableCount, setTableCount }) {
     const fetchOrders = async () => {
       try {
         const res = await axios.get(`${import.meta.env.VITE_API_URL}/custom/v1/orders?storeSlug=${storeSlug}`);
-        setOrders(res.data);
+        setOrders(Array.isArray(res.data) ? res.data : []);
       } catch (err) {
         // 에러 무시
       }
@@ -48,7 +48,7 @@ export default function OrderTab({ tableCount, setTableCount }) {
       await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/orders/delete-order`, { orderId });
       // 삭제 후 목록 새로고침
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/custom/v1/orders?storeSlug=${storeSlug}`);
-      setOrders(res.data);
+      setOrders(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       alert('주문 삭제 실패');
     }
@@ -73,7 +73,7 @@ export default function OrderTab({ tableCount, setTableCount }) {
         totalAmount: ordersArr.reduce((sum, item) => sum + item.price * item.quantity, 0)
       });
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/custom/v1/orders?storeSlug=${storeSlug}`);
-      setOrders(res.data);
+      setOrders(Array.isArray(res.data) ? res.data : []);
       setNewOrder({ menuItems: [], totalAmount: 0 });
       setSelectedTable(null);
       alert('주문이 추가되었습니다!');
@@ -113,55 +113,58 @@ export default function OrderTab({ tableCount, setTableCount }) {
             boxSizing: 'border-box',
           }}
         >
-          {[...Array(Number(tableCount))].map((_, idx) => {
-            const tableNumber = idx + 1;
-            const tableOrders = getTableOrders(tableNumber);
-            const menuList = tableOrders.flatMap(order => {
-              let items = order.orders;
-              if (typeof items === 'string') {
-                try { items = JSON.parse(items); } catch { items = []; }
-              }
-              if (!Array.isArray(items)) return [];
-              return items.map(item => `${safeDecode(item.name)} x ${item.quantity}`);
-            });
-            const totalAmount = tableOrders.flatMap(order => {
-              let items = order.orders;
-              if (typeof items === 'string') {
-                try { items = JSON.parse(items); } catch { items = []; }
-              }
-              if (!Array.isArray(items)) return [];
-              return items.map(item => Number(item.price) * Number(item.quantity || 1));
-            }).reduce((a, b) => a + b, 0);
-            const lastStatus = tableOrders.length > 0 ? (tableOrders[tableOrders.length - 1].status || '진행중') : '';
-            const lastOrderId = tableOrders.length > 0 ? (tableOrders[tableOrders.length - 1].order_id || tableOrders[tableOrders.length - 1].id) : null;
+          {(() => {
+            const safeTableCount = Math.max(0, Number(tableCount) || 0);
+            return [...Array(safeTableCount)].map((_, idx) => {
+              const tableNumber = idx + 1;
+              const tableOrders = getTableOrders(tableNumber);
+              const menuList = tableOrders.flatMap(order => {
+                let items = order.orders;
+                if (typeof items === 'string') {
+                  try { items = JSON.parse(items); } catch { items = []; }
+                }
+                if (!Array.isArray(items)) return [];
+                return items.map(item => `${safeDecode(item.name)} x ${item.quantity}`);
+              });
+              const totalAmount = tableOrders.flatMap(order => {
+                let items = order.orders;
+                if (typeof items === 'string') {
+                  try { items = JSON.parse(items); } catch { items = []; }
+                }
+                if (!Array.isArray(items)) return [];
+                return items.map(item => Number(item.price) * Number(item.quantity || 1));
+              }).reduce((a, b) => a + b, 0);
+              const lastStatus = tableOrders.length > 0 ? (tableOrders[tableOrders.length - 1].status || '진행중') : '';
+              const lastOrderId = tableOrders.length > 0 ? (tableOrders[tableOrders.length - 1].order_id || tableOrders[tableOrders.length - 1].id) : null;
 
-            return (
-              <div key={idx} style={{ border: '1px solid #ddd', minWidth: 110, maxWidth: 140, width: 'calc(20vw - 32px)', padding: 10, boxSizing: 'border-box' }}>
-                <h5>테이블 {tableNumber}</h5>
-                {tableOrders.length > 0 ? (
-                  <>
-                    <p>메뉴: {menuList.length > 0 ? menuList.join(', ') : '없음'}</p>
-                    <p>총액: {totalAmount.toLocaleString()}원</p>
-                    <p>상태: {lastStatus}</p>
-                    {lastOrderId && (
-                      <button onClick={() => handleDeleteOrder(lastOrderId)} style={{ marginTop: 5, padding: '5px 10px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 4 }}>주문 삭제</button>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <p>메뉴: 없음</p>
-                    <p>총액: 0원</p>
-                    <button 
-                      onClick={() => setSelectedTable(tableNumber)}
-                      style={{ marginTop: 5, padding: '5px 10px' }}
-                    >
-                      주문하기
-                    </button>
-                  </>
-                )}
-              </div>
-            );
-          })}
+              return (
+                <div key={idx} style={{ border: '1px solid #ddd', minWidth: 110, maxWidth: 140, width: 'calc(20vw - 32px)', padding: 10, boxSizing: 'border-box' }}>
+                  <h5>테이블 {tableNumber}</h5>
+                  {tableOrders.length > 0 ? (
+                    <>
+                      <p>메뉴: {menuList.length > 0 ? menuList.join(', ') : '없음'}</p>
+                      <p>총액: {totalAmount.toLocaleString()}원</p>
+                      <p>상태: {lastStatus}</p>
+                      {lastOrderId && (
+                        <button onClick={() => handleDeleteOrder(lastOrderId)} style={{ marginTop: 5, padding: '5px 10px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 4 }}>주문 삭제</button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p>메뉴: 없음</p>
+                      <p>총액: 0원</p>
+                      <button 
+                        onClick={() => setSelectedTable(tableNumber)}
+                        style={{ marginTop: 5, padding: '5px 10px' }}
+                      >
+                        주문하기
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            });
+          })()}
         </div>
 
         {selectedTable && (

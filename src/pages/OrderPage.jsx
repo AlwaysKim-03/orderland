@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
 import OrderSummaryModal from '../components/OrderSummaryModal';
 import styles from './OrderPage.module.css';
-// firebase 관련 import 완전 삭제
+import { db } from '../firebase'; // Firebase db 객체 가져오기
+import { collection, query, where, getDocs, addDoc, onSnapshot, orderBy } from 'firebase/firestore';
 
 function getTableKey(storeSlug, tableId) {
   return `${storeSlug}-Table-${String(tableId).replace(/^table-/, '')}`;
@@ -96,8 +96,11 @@ function displayName(slug, storeSlug = '') {
 
 export default function OrderPage() {
   const params = useParams();
-  const storeSlug = toSlug(params.storeSlug);
-  const tableNumber = getTableKey(storeSlug, params.tableId);
+  const storeSlug = params.storeSlug;
+  const storeName = storeSlug.replace(/-/g, ' '); // URL 슬러그를 원래 가게 이름으로 변환
+  const tableId = Number(params.tableId.replace('table-', ''));
+  
+  const [storeId, setStoreId] = useState(null); // 가게 주인의 user.uid
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [products, setProducts] = useState([]);
@@ -109,84 +112,107 @@ export default function OrderPage() {
   const [error, setError] = useState(null);
   const [menuQuantities, setMenuQuantities] = useState({});
 
-  // 카테고리 정보 가져오기
+  // storeName을 기반으로 storeId(user.uid)를 찾는 로직
+  const fetchStoreId = useCallback(async () => {
+    try {
+      const q = query(collection(db, "users"), where("store_name", "==", storeName));
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        const storeOwner = querySnapshot.docs[0];
+        setStoreId(storeOwner.id);
+      } else {
+        setError('가게 정보를 찾을 수 없습니다.');
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error("가게 ID 조회 실패:", err);
+      setError('가게 정보를 불러오는 중 오류가 발생했습니다.');
+      setLoading(false);
+    }
+  }, [storeName]);
+
   useEffect(() => {
+    fetchStoreId();
+  }, [fetchStoreId]);
+
+  // 카테고리 정보 가져오기 (Firestore)
+  useEffect(() => {
+    if (!storeId) return;
+
     const fetchCategories = async () => {
+      setLoading(true);
       try {
-        setLoading(true);
-        // storeSlug(김한결-가게) → storeName(slug)
-        const storeName = toSlug(storeSlug);
-        const idRes = await axios.get(`${import.meta.env.VITE_API_URL.replace('/wp-json','')}/wp-json/custom/v1/get-account-id?storeName=${encodeURIComponent(storeName)}`, {
-          headers: {
-            Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
-          }
-        });
-        const accountId = idRes.data?.accountId;
-        if (!accountId) throw new Error('계정 ID를 찾을 수 없습니다.');
-        const res = await axios.get(`${import.meta.env.VITE_API_URL.replace('/wp-json','')}/wp-json/custom/v1/get-categories-by-store?accountId=${accountId}`, {
-          headers: {
-            Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
-          }
-        });
-        if (!Array.isArray(res.data) || res.data.length === 0) throw new Error('카테고리가 없습니다.');
-        setCategories(res.data);
-        setSelectedCategory(res.data[0]);
-      } catch (err) {
-        setError(err.message);
-      } finally {
+        const q = query(collection(db, "categories"), where("storeId", "==", storeId), orderBy("createdAt"));
+        const querySnapshot = await getDocs(q);
+        const fetchedCategories = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setCategories(fetchedCategories);
+        if(fetchedCategories.length > 0) {
+          setSelectedCategory(fetchedCategories[0]);
+        }
+        if(fetchedCategories.length === 0) {
+          setLoading(false); // 상품을 가져올 카테고리가 없으므로 로딩 종료
+        }
+      } catch (error) {
+        console.error('Firestore 카테고리 로딩 실패:', error);
+        setError('카테고리를 불러오는데 실패했습니다.');
         setLoading(false);
       }
     };
     fetchCategories();
-  }, [storeSlug]);
+  }, [storeId]);
 
-  // 메뉴 정보 가져오기
+  // 메뉴 정보 가져오기 (Firestore)
   useEffect(() => {
     if (!selectedCategory) return;
-    const fetchMenus = async () => {
+    const fetchProducts = async () => {
+      setLoading(true);
       try {
-        setLoading(true);
-        const res = await axios.get(`${import.meta.env.VITE_API_URL.replace('/wp-json','')}/wp-json/custom/v1/get-products-by-category?slug=${selectedCategory.slug}`);
-        setProducts(res.data);
-      } catch (err) {
-        setError(err.message);
+        const q = query(
+          collection(db, "products"), 
+          where("storeId", "==", storeId), 
+          where("category", "==", selectedCategory.name)
+        );
+        const querySnapshot = await getDocs(q);
+        const fetchedProducts = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setProducts(fetchedProducts);
+      } catch (error) {
+        console.error('Firestore 상품 로딩 실패:', error);
+        setError('메뉴를 불러오는데 실패했습니다.');
       } finally {
-        setLoading(false);
+        setLoading(false); // 메뉴 로딩이 끝나면 로딩 상태 해제
       }
     };
-    fetchMenus();
-  }, [selectedCategory]);
+    fetchProducts();
+  }, [selectedCategory, storeId]);
 
-  // 주문내역 서버에서 불러오는 함수 분리
-  const fetchOrders = async () => {
-    try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL.replace('/wp-json','')}/wp-json/custom/v1/orders/store/${storeSlug}`, {
-        headers: {
-          Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
-        }
-      });
-      const myTableKey = getTableKey(storeSlug, params.tableId);
-      const filtered = (res.data || []).filter(order => order.tableNumber === myTableKey);
-      // 주문 데이터 정규화
-      const normalizedOrders = filtered.map(order => ({
-        ...order,
-        orders: Array.isArray(order.orders) 
-          ? order.orders 
-          : (typeof order.orders === 'string' ? JSON.parse(order.orders) : [])
-      }));
-      setOrderHistory(normalizedOrders);
-    } catch (err) {
-      console.error('주문내역 fetch 실패:', err);
-      setOrderHistory([]);
-    }
-  };
-
-  // 주문내역 useEffect에서 fetchOrders 사용 (5초마다 polling)
+  // 주문내역 실시간으로 불러오기 (Firestore)
   useEffect(() => {
-    fetchOrders();
-    const interval = setInterval(fetchOrders, 5000);
-    return () => clearInterval(interval);
-  }, [storeSlug, params.tableId]);
+    if (!storeId) return;
+    
+    const q = query(
+      collection(db, "orders"), 
+      where("storeId", "==", storeId), 
+      where("tableNumber", "==", tableId),
+      where("status", "in", ["new", "processing"])
+    );
+
+    // onSnapshot을 사용하여 실시간으로 주문 변경을 감지
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const fetchedOrders = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        // Firestore timestamp를 JS Date 객체로 변환
+        date: doc.data().createdAt?.toDate() 
+      }));
+      setOrderHistory(fetchedOrders);
+    }, (err) => {
+      console.error('주문내역 실시간 수신 실패:', err);
+      setError('주문 내역을 불러오는 데 실패했습니다.');
+    });
+
+    // 컴포넌트가 언마운트될 때 리스너 정리
+    return () => unsubscribe();
+  }, [storeId, tableId]);
 
   // 수량 변경 핸들러
   const handleQuantityChange = (menuId, delta) => {
@@ -217,351 +243,148 @@ export default function OrderPage() {
     setCart(prev => prev.filter(item => item.id !== menuId));
   };
 
-  // 주문 제출
+  // 주문 제출 함수 수정
   const handleOrderSubmit = async () => {
     if (cart.length === 0) {
       alert('장바구니가 비어있습니다.');
       return;
     }
+    if (!storeId) {
+      alert('가게 정보가 올바르지 않아 주문할 수 없습니다.');
+      return;
+    }
     try {
       const orderData = {
-        storeSlug,
-        tableNumber: getTableKey(storeSlug, params.tableId),
-        orders: cart.map(item => ({
+        storeId: storeId,
+        tableNumber: tableId,
+        items: cart.map(item => ({
+          id: item.id, // product id
           name: item.name,
           category: item.category || '',
-          price: Number(item.regular_price),
+          price: Number(item.price),
           quantity: Number(item.count)
         })),
-        totalAmount: cart.reduce((sum, item) => sum + item.count * Number(item.regular_price), 0),
-        status: '신규'
+        totalAmount: cart.reduce((sum, item) => sum + item.count * Number(item.price), 0),
+        status: 'new', // 'new', 'processing', 'completed'
+        createdAt: new Date()
       };
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/orders`, orderData, {
-        headers: {
-          Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
-        }
-      });
-      if (response.data.success) {
-        await fetchOrders();
-        setCart([]);
-        setIsCartOpen(false);
-        alert('주문이 접수되었습니다!');
-      } else {
-        throw new Error(response.data.error || '주문 접수에 실패했습니다.');
-      }
-    } catch (err) {
-      alert('주문 실패: ' + (err.response?.data?.error || err.message));
-    }
-  };
+      
+      await addDoc(collection(db, "orders"), orderData);
+      
+      // 성공 후 처리
+      setCart([]);
+      setIsCartOpen(false);
+      alert('주문이 접수되었습니다!');
 
-  // 회원가입은 워드프레스 API만 사용하도록 수정
-  const handleRegister = async (email, password) => {
-    // 워드프레스 회원가입 로직을 여기에 추가할 수 있습니다.
-    alert('회원가입은 로그인/회원가입 페이지에서 진행해 주세요.');
+    } catch (err) {
+      console.error("Firestore 주문 제출 실패:", err);
+      alert('주문 실패: ' + err.message);
+    }
   };
 
   const handleCallStaff = async () => {
+    if (!storeId || !tableId) {
+      alert("오류: 가게 또는 테이블 정보가 없습니다.");
+      return;
+    }
+    const callMessage = window.prompt("직원에게 전달할 메시지를 입력하세요 (예: 숟가락 좀 주세요).");
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/custom/v1/call`, {
-        storeSlug,
-        tableNumber: params.tableId,
-        timestamp: new Date().toISOString()
-      }, {
-        headers: {
-          Authorization: `Basic ${btoa(import.meta.env.VITE_WP_ADMIN_USER + ':' + import.meta.env.VITE_WP_APP_PASSWORD)}`
-        }
+      await addDoc(collection(db, "staff_calls"), {
+        storeId,
+        tableNumber: tableId,
+        message: callMessage || '직원 호출',
+        status: 'new',
+        createdAt: new Date(),
       });
-      alert('직원 호출 요청이 전송되었습니다!');
-    } catch (err) {
-      alert('직원 호출 요청에 실패했습니다.');
+      alert('직원을 호출했습니다. 잠시만 기다려주세요.');
+    } catch(err) {
+      console.error('직원 호출 실패:', err);
+      alert('오류가 발생하여 직원을 호출하지 못했습니다.');
     }
   };
 
-  if (loading) return <div style={{ padding: 40 }}>로딩 중...</div>;
-  if (error) return <div style={{ padding: 40, color: 'red' }}>에러: {error}</div>;
+  // 장바구니 총액 계산
+  const cartTotal = cart.reduce((sum, item) => sum + item.price * item.count, 0);
 
+  if (loading && products.length === 0) {
+    return <div className={styles.loadingContainer}>메뉴를 불러오는 중...</div>;
+  }
+
+  if (error) {
+    return <div className={styles.errorContainer}>{error}</div>;
+  }
+  
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#f8fafc',
-      padding: '20px',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center'
-    }}>
-      {/* 헤더 섹션 */}
-      <div style={{
-        width: '100%',
-        maxWidth: '1200px',
-        background: '#fff',
-        borderRadius: '16px',
-        padding: '24px',
-        marginBottom: '24px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-      }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '20px'
-        }}>
+    <div className={styles.pageWrapper}>
+      <div className={styles.headerCard}>
+        <div className={styles.headerContent}>
           <div>
-            <h1 style={{
-              margin: 0,
-              fontSize: '24px',
-              color: '#1e293b',
-              fontWeight: '600'
-            }}>
-              {displayName(storeSlug)}
-            </h1>
-            <p style={{
-              margin: '8px 0 0',
-              color: '#64748b',
-              fontSize: '16px'
-            }}>
-              테이블 {params.tableId}
-            </p>
+            <h1 className={styles.storeName}>{storeName}</h1>
+            <p className={styles.tableName}>테이블 {tableId}</p>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={handleCallStaff}
-              style={{
-                background: '#f59e42',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 8,
-                padding: '12px 24px',
-                fontWeight: 600,
-                fontSize: 16,
-                cursor: 'pointer'
-              }}
-            >
-              직원 호출
-            </button>
-            <button 
-              onClick={() => setIsCartOpen(true)}
-              style={{
-                padding: '12px 24px',
-                background: '#3b82f6',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '16px',
-                fontWeight: '600',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                boxShadow: '0 2px 4px rgba(59,130,246,0.1)',
-                transition: 'all 0.2s'
-              }}
-              onMouseOver={e => e.currentTarget.style.background = '#2563eb'}
-              onMouseOut={e => e.currentTarget.style.background = '#3b82f6'}
-            >
+          <div className={styles.headerActions}>
+            <button onClick={handleCallStaff} className={styles.callButton}>직원 호출</button>
+            <button onClick={() => setIsCartOpen(true)} className={styles.cartButton}>
               <span>장바구니</span>
               {cart.length > 0 && (
-                <span style={{
-                  background: '#fff',
-                  color: '#3b82f6',
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                  fontSize: '14px'
-                }}>
-                  {cart.length}
-                </span>
+                <span className={styles.cartCount}>{cart.length}</span>
               )}
             </button>
           </div>
         </div>
-        {/* 카테고리 버튼들 */}
-        <div className={styles['category-scroll']}>
-          {categories.map(category => (
+        <div className={styles.categoryContainer}>
+          {categories.map(cat => (
             <button
-              key={category.id}
-              onClick={() => setSelectedCategory(category)}
-              style={{
-                padding: '12px 24px',
-                background: selectedCategory?.id === category.id ? '#3b82f6' : '#f1f5f9',
-                color: selectedCategory?.id === category.id ? '#fff' : '#1e293b',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontWeight: '600',
-                fontSize: '15px',
-                whiteSpace: 'nowrap',
-                transition: 'all 0.2s',
-                boxShadow: selectedCategory?.id === category.id ? '0 2px 4px rgba(59,130,246,0.1)' : 'none'
-              }}
+              key={cat.id}
+              className={`${styles.categoryButton} ${selectedCategory?.id === cat.id ? styles.active : ''}`}
+              onClick={() => setSelectedCategory(cat)}
             >
-              {getCategoryDisplayName(category.name, storeSlug)}
+              {cat.name}
             </button>
           ))}
         </div>
       </div>
-      {/* 메뉴 아이템 그리드 */}
-      <div style={{
-        width: '100%',
-        maxWidth: '1200px',
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-        gap: '24px',
-        padding: '0 12px'
-      }}>
-        {products.map(menuItem => (
-          <div
-            key={menuItem.id}
-            style={{
-              background: '#fff',
-              borderRadius: '12px',
-              padding: '20px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-              transition: 'transform 0.2s',
-              cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              minHeight: '260px'
-            }}
-            onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-            onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}
-          >
-            <h3 style={{
-              margin: '0 0 8px',
-              fontSize: '18px',
-              color: '#1e293b',
-              fontWeight: '600'
-            }}>
-              {displayName(menuItem.name)}
-            </h3>
-            {/* 이미지 공간 */}
-            {menuItem.image ? (
-              <img
-                src={menuItem.image}
-                alt={displayName(menuItem.name)}
-                style={{
-                  width: '100%',
-                  height: '160px',
-                  objectFit: 'cover',
-                  borderRadius: '8px',
-                  marginBottom: '12px'
-                }}
-              />
-            ) : (
-              <div style={{
-                width: '100%',
-                height: '160px',
-                background: '#f1f5f9',
-                borderRadius: '8px',
-                marginBottom: '12px'
-              }} />
-            )}
-            <div style={{
-              marginTop: 'auto',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: '8px'
-            }}>
-              <span style={{
-                fontSize: '18px',
-                fontWeight: '600',
-                color: '#1e293b'
-              }}>
-                {Number(menuItem.regular_price).toLocaleString()}원
-              </span>
-              {/* 수량 선택 UI */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <button
-                  onClick={() => handleQuantityChange(menuItem.id, -1)}
-                  style={{
-                    padding: '4px 10px',
-                    background: '#f1f5f9',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    fontSize: 16
-                  }}
-                >-</button>
-                <span style={{ minWidth: 24, textAlign: 'center', fontWeight: 600 }}>
-                  {menuQuantities[menuItem.id] || 1}
-                </span>
-                <button
-                  onClick={() => handleQuantityChange(menuItem.id, 1)}
-                  style={{
-                    padding: '4px 10px',
-                    background: '#f1f5f9',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    fontSize: 16
-                  }}
-                >+</button>
+
+      <main className={styles.menuGrid}>
+        {products.map(menu => (
+          <div key={menu.id} className={styles.menuItem}>
+            <img 
+              src={menu.imageUrl || 'https://via.placeholder.com/300x200'} 
+              alt={menu.name}
+              className={styles.menuImage}
+            />
+            <div className={styles.menuInfo}>
+              <h3 className={styles.menuName}>{safeDecode(menu.name)}</h3>
+              <p className={styles.menuPrice}>{Number(menu.price).toLocaleString()}원</p>
+            </div>
+            <div className={styles.menuActions}>
+              <div className={styles.quantityControl}>
+                <button onClick={() => handleQuantityChange(menu.id, -1)}>-</button>
+                <span>{menuQuantities[menu.id] || 1}</span>
+                <button onClick={() => handleQuantityChange(menu.id, 1)}>+</button>
               </div>
-              <button
-                onClick={() => handleAddToCart(menuItem)}
-                style={{
-                  padding: '8px 16px',
-                  background: '#3b82f6',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  transition: 'background 0.2s'
-                }}
-                onMouseOver={e => e.currentTarget.style.background = '#2563eb'}
-                onMouseOut={e => e.currentTarget.style.background = '#3b82f6'}
-              >
-                담기
-              </button>
+              <button className={styles.addButton} onClick={() => handleAddToCart(menu)}>담기</button>
             </div>
           </div>
         ))}
-      </div>
+      </main>
+      
+      <button className={styles.historyButton} onClick={() => setIsHistoryOpen(true)}>
+        총 주문내역
+      </button>
+
       <OrderSummaryModal
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
-        orders={cart.map(item => ({
-          id: item.id,
-          name: item.name,
-          price: Number(item.regular_price),
-          quantity: item.count
-        }))}
-        onUpdateQuantity={(id, qty) => {
-          if (qty < 1) return;
-          setCart(prev => prev.map(item => item.id === id ? { ...item, count: qty } : item));
-        }}
-        onRemoveOrder={removeFromCart}
-        onOrder={cart.length > 0 ? handleOrderSubmit : undefined}
+        cart={cart}
+        onSubmit={handleOrderSubmit}
+        onRemove={removeFromCart}
       />
-      {/* 오른쪽 하단 floating 총 주문내역 버튼 */}
-      <button
-        onClick={() => setIsHistoryOpen(true)}
-        style={{
-          position: 'fixed',
-          right: 32,
-          bottom: 32,
-          zIndex: 3000,
-          background: '#3b82f6',
-          color: '#fff',
-          border: 'none',
-          borderRadius: 24,
-          padding: '16px 28px',
-          fontSize: 18,
-          fontWeight: 600,
-          boxShadow: '0 2px 8px rgba(59,130,246,0.15)',
-          cursor: 'pointer',
-          transition: 'background 0.2s'
-        }}
-        onMouseOver={e => e.currentTarget.style.background = '#2563eb'}
-        onMouseOut={e => e.currentTarget.style.background = '#3b82f6'}
-      >
-        총 주문내역
-      </button>
-      <OrderHistoryModal isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} orderHistory={orderHistory} />
+       <OrderHistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        orderHistory={orderHistory}
+      />
     </div>
   );
 } 

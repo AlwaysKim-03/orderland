@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { loginUser } from "../api/wordpress";
+import { auth } from "../firebase"; // Firebase auth 객체 가져오기
+import { signInWithEmailAndPassword } from "firebase/auth"; // Firebase 인증 함수 가져오기
 import "./LoginPage.css";
 
 function LoginPage() {
@@ -11,9 +12,11 @@ function LoginPage() {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const res = await loginUser({ email, password });
-      localStorage.setItem("token", res.token);
-      localStorage.setItem("user_email", email);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // 로그인 성공
+      console.log("로그인 성공:", userCredential.user);
+      localStorage.setItem("user_email", userCredential.user.email); // 이메일 저장
+      
       // 로그인 성공 후 orderHistory_로 시작하는 localStorage 키 모두 삭제
       Object.keys(localStorage).forEach(key => {
         if (key.startsWith('orderHistory_')) {
@@ -23,7 +26,8 @@ function LoginPage() {
       alert("로그인 성공");
       navigate("/dashboard");
     } catch (err) {
-      alert("로그인 실패: " + (err.response?.data?.message || err.message));
+      console.error("Firebase 로그인 실패:", err);
+      alert("로그인 실패: " + err.message);
     }
   };
 
@@ -33,8 +37,8 @@ function LoginPage() {
         <h2>로그인</h2>
         <form onSubmit={handleLogin}>
           <input
-            type="text"
-            placeholder="이메일 또는 아이디"
+            type="email"
+            placeholder="이메일"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required

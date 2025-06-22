@@ -1,29 +1,126 @@
-
 # BEGIN WordPress
 # "BEGIN WordPress"와 "END WordPress" 사이의 지시문(줄)은 
 # 동적으로 생성되며 워드프레스 필터를 통해서만 수정해야합니다. 
 # 이 표시 사이의 지시문을 변경하면 덮어쓰게 됩니다.
 <IfModule mod_rewrite.c>
 RewriteEngine On
-RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 RewriteBase /
 RewriteRule ^index\.php$ - [L]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule . /index.php [L]
 </IfModule>
-
 # END WordPress
+
+# ===== JWT 인증 (필수) =====
+RewriteEngine On
+RewriteCond %{HTTP:Authorization} ^(.*)
+RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+
+# ===== 보안 설정 =====
+
+# XML-RPC 비활성화 (보안 강화)
 # BEGIN DS-XML-RPC-API
-# "BEGIN DS-XML-RPC-API"와 "END DS-XML-RPC-API" 사이의 지시문(줄)은 
-# 동적으로 생성되며 워드프레스 필터를 통해서만 수정해야합니다. 
-# 이 표시 사이의 지시문을 변경하면 덮어쓰게 됩니다.
 <Files xmlrpc.php>
 order deny,allow
 deny from all
+</Files>
+# END DS-XML-RPC-API
 
+# ===== CORS 설정 (실사용 도메인만 허용) =====
+<IfModule mod_headers.c>
+  # 실사용 도메인만 허용
+  SetEnvIf Origin "https://store-owner-web.vercel.app$" ACAO=$0
+  SetEnvIf Origin "https://store-owner-35f4kgoac-alwayskim-03s-projects.vercel.app$" ACAO=$0
+  SetEnvIf Origin "https://store-owner-i420l0wj4-alwayskim-03s-projects.vercel.app$" ACAO=$0
+  
+  # 개발용 localhost는 주석처리 (실사용에서는 제거)
+  # SetEnvIf Origin "http://localhost:5173$" ACAO=$0
+  # SetEnvIf Origin "http://localhost:3000$" ACAO=$0
+  
+  Header set Access-Control-Allow-Origin %{ACAO}e env=ACAO
+  Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE"
+  Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+  Header always set Access-Control-Allow-Credentials "true"
+  
+  # OPTIONS 요청 처리
+  RewriteEngine On
+  RewriteCond %{REQUEST_METHOD} OPTIONS
+  RewriteRule ^(.*)$ $1 [R=200,L]
+</IfModule>
+
+# ===== 추가 보안 설정 =====
+
+# 중요 파일 접근 차단 (wp-config.php, .htaccess 등)
+<Files ~ "^(wp-config\.php|\.htaccess|readme\.html)$">
+  Order allow,deny
+  Deny from all
 </Files>
 
-# END DS-XML-RPC-API
-# JWT 인증 설정
-SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+# 디렉토리 리스팅 비활성화
+Options -Indexes
+
+# 서버 정보 숨기기
+ServerTokens Prod
+ServerSignature Off
+
+# PHP 파일 업로드 제한
+# <IfModule mod_php.c>
+#   php_value upload_max_filesize 10M
+#   php_value post_max_size 10M
+#   php_value max_execution_time 300
+#   php_value max_input_vars 3000
+# </IfModule>
+
+# ===== 성능 최적화 =====
+
+# 브라우저 캐싱 활성화
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType image/jpg "access plus 1 month"
+  ExpiresByType image/jpeg "access plus 1 month"
+  ExpiresByType image/gif "access plus 1 month"
+  ExpiresByType image/png "access plus 1 month"
+  ExpiresByType text/css "access plus 1 month"
+  ExpiresByType application/pdf "access plus 1 month"
+  ExpiresByType text/javascript "access plus 1 month"
+  ExpiresByType application/javascript "access plus 1 month"
+  ExpiresByType application/x-javascript "access plus 1 month"
+  ExpiresByType image/x-icon "access plus 1 year"
+  ExpiresDefault "access plus 2 days"
+</IfModule>
+
+# Gzip 압축 활성화
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/plain
+  AddOutputFilterByType DEFLATE text/html
+  AddOutputFilterByType DEFLATE text/xml
+  AddOutputFilterByType DEFLATE text/css
+  AddOutputFilterByType DEFLATE application/xml
+  AddOutputFilterByType DEFLATE application/xhtml+xml
+  AddOutputFilterByType DEFLATE application/rss+xml
+  AddOutputFilterByType DEFLATE application/javascript
+  AddOutputFilterByType DEFLATE application/x-javascript
+</IfModule>
+
+# ===== 에러 페이지 설정 =====
+ErrorDocument 404 /index.php
+ErrorDocument 403 /index.php
+
+# ===== 파일 업로드 보안 =====
+<FilesMatch "\.(php|php3|php4|php5|phtml|pl|py|jsp|asp|sh|cgi)$">
+  <IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/wp-admin/
+    RewriteCond %{REQUEST_URI} !^/wp-includes/
+    RewriteRule .* - [F,L]
+  </IfModule>
+</FilesMatch>
+
+# ===== 악성 봇 차단 =====
+RewriteCond %{HTTP_USER_AGENT} ^$ [OR]
+RewriteCond %{HTTP_USER_AGENT} ^(java|curl|wget).* [NC,OR]
+RewriteCond %{HTTP_USER_AGENT} ^.*(libwww-perl|curl|wget|python|nikto|scan).* [NC,OR]
+RewriteCond %{HTTP_USER_AGENT} ^.*(winhttp|HTTrack|clshttp|archiver|loader|email|harvest|extract|grab|miner).* [NC]
+RewriteRule .* - [F,L]
