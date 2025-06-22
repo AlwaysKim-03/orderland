@@ -262,6 +262,7 @@ export default function OrderManagePage({ orders: allOrders = [] }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const tableCount = userInfo?.tableCount || 0;
   const [tableCountInput, setTableCountInput] = useState(0);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
     if (userInfo) {
@@ -347,11 +348,24 @@ export default function OrderManagePage({ orders: allOrders = [] }) {
     }
   };
 
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'row', gap: '24px', height: 'calc(100vh - 200px)' }}>
+    <div style={{ 
+      display: 'flex', 
+      flexDirection: isMobile ? 'column' : 'row', 
+      gap: '24px', 
+      height: 'calc(100vh - 200px)' 
+    }}>
       {/* 왼쪽: 테이블별 주문 현황 */}
-      <div style={{ flex: 3, overflowY: 'auto', paddingRight: '16px' }}>
-        <div style={{display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '16px'}}>
+      <div style={{ flex: 3, overflowY: 'auto', paddingRight: isMobile ? 0 : '16px' }}>
+        <div style={{display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '20px', marginBottom: '16px'}}>
           <h3>테이블별 주문 현황</h3>
           <div>
             <label>테이블 수: </label>
@@ -433,7 +447,7 @@ export default function OrderManagePage({ orders: allOrders = [] }) {
       </div>
       
       {/* 오른쪽: 실시간 주문 내역 */}
-      <div style={{ flex: 2, borderLeft: '1px solid #eee', paddingLeft: '24px', overflowY: 'auto' }}>
+      <div style={{ flex: 2, borderLeft: isMobile ? 'none' : '1px solid #eee', borderTop: isMobile ? '1px solid #eee' : 'none', paddingLeft: isMobile ? 0 : '24px', paddingTop: isMobile ? '24px' : 0, overflowY: 'auto' }}>
         <h3>실시간 주문 내역</h3>
         {realtimeOrders.length === 0 ? (
           <div>신규 주문이 없습니다.</div>
