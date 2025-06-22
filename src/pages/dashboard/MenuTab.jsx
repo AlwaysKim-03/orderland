@@ -154,13 +154,13 @@ export default function MenuTab({ categories, products, onMenuUpdate }) {
           <button style={styles.button} onClick={() => setEditingProduct(null)}>+ 새 메뉴 추가</button>
         </div>
         <table style={styles.table}>
-          <thead>
+        <thead>
             <tr>
               <th style={{...styles.th, width: '80px'}}>사진</th>
               <th style={styles.th}>이름</th><th style={styles.th}>가격</th><th style={styles.th}>카테고리</th><th style={styles.th}>작업</th>
-            </tr>
-          </thead>
-          <tbody>
+          </tr>
+        </thead>
+        <tbody>
             {filteredMenus.map((menu) => (
               <tr key={menu.id}>
                 <td style={styles.td}>
@@ -168,23 +168,23 @@ export default function MenuTab({ categories, products, onMenuUpdate }) {
                     <img src={menu.imageUrl} alt={menu.name} style={styles.menuImage} />
                   ) : (
                     <div style={{...styles.menuImage, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: '12px'}}>No img</div>
-                  )}
-                </td>
+                )}
+              </td>
                 <td style={styles.td}>{menu.name}</td>
                 <td style={styles.td}>{menu.price.toLocaleString()}원</td>
                 <td style={styles.td}>{menu.category}</td>
                 <td style={styles.td}>
                   <button onClick={() => setEditingProduct(menu)} style={{marginRight: '8px'}}>수정</button>
-                  <button onClick={async () => {
+                    <button onClick={async () => {
                       if (!window.confirm("정말로 메뉴를 삭제하시겠습니까?")) return;
                       await deleteDoc(doc(db, "products", menu.id));
                       onMenuUpdate();
                   }}>삭제</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       </main>
 
       {/* Category Add/Edit Modal */}
@@ -195,8 +195,8 @@ export default function MenuTab({ categories, products, onMenuUpdate }) {
           category={editingCategory}
           onSave={onMenuUpdate}
         />
-      )}
-    </div>
+            )}
+          </div>
   );
 }
 
@@ -255,7 +255,7 @@ function CategoryModal({ isOpen, onClose, category, onSave }) {
                     <button onClick={onClose}>취소</button>
                     <button style={styles.button} onClick={handleSave}>저장</button>
                 </div>
-            </div>
-        </div>
-    );
+      </div>
+    </div>
+  );
 } 

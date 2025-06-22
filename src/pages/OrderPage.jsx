@@ -240,7 +240,23 @@ export default function OrderPage() {
 
   // 장바구니에서 메뉴 제거
   const removeFromCart = (menuId) => {
-    setCart(prev => prev.filter(item => item.id !== menuId));
+    if (menuId === 'all') {
+      setCart([]);
+    } else {
+      setCart(prev => prev.filter(item => item.id !== menuId));
+    }
+  };
+
+  const handleUpdateCartQuantity = (menuId, newQuantity) => {
+    if (newQuantity < 1) {
+      removeFromCart(menuId);
+    } else {
+      setCart(prevCart =>
+        prevCart.map(item =>
+          item.id === menuId ? { ...item, count: newQuantity } : item
+        )
+      );
+    }
   };
 
   // 주문 제출 함수 수정
@@ -272,9 +288,9 @@ export default function OrderPage() {
       await addDoc(collection(db, "orders"), orderData);
       
       // 성공 후 처리
-      setCart([]);
-      setIsCartOpen(false);
-      alert('주문이 접수되었습니다!');
+        setCart([]);
+        setIsCartOpen(false);
+        alert('주문이 접수되었습니다!');
 
     } catch (err) {
       console.error("Firestore 주문 제출 실패:", err);
@@ -313,7 +329,7 @@ export default function OrderPage() {
   if (error) {
     return <div className={styles.errorContainer}>{error}</div>;
   }
-  
+
   return (
     <div className={styles.pageWrapper}>
       <div className={styles.headerCard}>
@@ -376,9 +392,12 @@ export default function OrderPage() {
       <OrderSummaryModal
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
-        cart={cart}
-        onSubmit={handleOrderSubmit}
-        onRemove={removeFromCart}
+        orders={cart}
+        onRemoveOrder={removeFromCart}
+        onOrder={handleOrderSubmit}
+        onUpdateQuantity={handleUpdateCartQuantity}
+        storeId={storeId}
+        tableId={tableId}
       />
        <OrderHistoryModal
         isOpen={isHistoryOpen}

@@ -146,7 +146,7 @@ export default function SalesTab({ orders }) {
         <div style={styles.card}>
           <h4 style={styles.cardTitle}>주문 건수</h4>
           <p style={styles.cardValue}>{salesData?.orderCount?.toLocaleString() || 0}건</p>
-        </div>
+              </div>
         <div style={styles.card}>
           <h4 style={styles.cardTitle}>평균 주문 금액</h4>
           <p style={styles.cardValue}>{avgOrderValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}원</p>

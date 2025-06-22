@@ -1,169 +1,163 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { auth, db } from "../firebase"; // Firebase auth 및 db 객체 가져오기
 import { createUserWithEmailAndPassword } from "firebase/auth"; // Firebase 회원가입 함수
 import { doc, setDoc } from "firebase/firestore"; // Firestore 데이터 저장 함수
-import "./RegisterPage.css";
+import styles from '../styles/AuthForm.module.css';
 
-function RegisterPage() {
-  const navigate = useNavigate();
+export default function RegisterPage() {
   const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState({
-    name: "",
-    phone: "",
-    store_name: "",
-    store_address: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-    store_phone: "",
-  });
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [storeName, setStoreName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   const nextStep = () => setStep((prev) => prev + 1);
   const prevStep = () => setStep((prev) => prev - 1);
 
   const handleRegister = async (e) => {
     e.preventDefault();
-    if (formData.password !== formData.confirmPassword) {
-      alert("비밀번호가 일치하지 않습니다.");
+    if (!name || !phone || !storeName || !email || !password) {
+      setError('모든 필드를 입력해주세요.');
       return;
     }
     try {
-      // 1. Firebase Authentication으로 사용자 생성
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        formData.email,
-        formData.password
-      );
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-
-      // 2. Firestore에 추가 정보 저장
-      await setDoc(doc(db, "users", user.uid), {
-        name: formData.name,
-        phone: formData.phone,
-        store_name: formData.store_name,
-        store_address: formData.store_address,
-        email: formData.email,
-      });
-
-      // 회원가입 성공 후 처리
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('orderHistory_')) {
-          localStorage.removeItem(key);
-        }
-      });
-      // 가게명 동기화 (필요하다면 유지, 하지만 Firestore에서 관리하는 것이 더 좋음)
-      localStorage.setItem('restaurantName', formData.store_name);
-      localStorage.setItem('storeName', formData.store_name);
-      localStorage.setItem('storeInfo', JSON.stringify({ storeName: formData.store_name }));
       
-      alert("회원가입 성공!");
-      navigate("/login");
+      // Firestore에 사용자 정보 저장
+      await setDoc(doc(db, "users", user.uid), {
+        uid: user.uid,
+        email: user.email,
+        name: name,
+        phone: phone,
+        store_name: storeName,
+        tableCount: 0,
+        createdAt: new Date()
+      });
+      
+      navigate('/');
     } catch (err) {
-      console.error("Firebase 회원가입 실패:", err);
-      alert("회원가입 실패: " + err.message);
+      if (err.code === 'auth/email-already-in-use') {
+        setError('이미 사용 중인 이메일입니다.');
+      } else if (err.code === 'auth/weak-password') {
+        setError('비밀번호는 6자리 이상이어야 합니다.');
+      } else {
+        setError('회원가입에 실패했습니다. 다시 시도해주세요.');
+      }
+      console.error(err);
     }
   };
 
   return (
-    <div className="register-container">
-      <div className="register-box">
-        <h2>회원가입</h2>
+    <div className={styles.container}>
+      <div className={styles.formWrapper}>
+        <h1 className={styles.title}>회원가입</h1>
         <form onSubmit={handleRegister}>
           {step === 1 && (
             <>
+              <div className={styles.inputGroup}>
               <input
                 type="text"
-                name="name"
                 placeholder="이름"
-                value={formData.name}
-                onChange={handleChange}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className={styles.input}
                 required
               />
+              </div>
+              <div className={styles.inputGroup}>
               <input
                 type="tel"
-                name="phone"
                 placeholder="전화번호"
-                value={formData.phone}
-                onChange={handleChange}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className={styles.input}
                 required
               />
-              <div className="step-buttons">
-                <button type="button" onClick={nextStep}>다음</button>
               </div>
+              <button type="button" className={styles.button} onClick={() => {
+                if (!name || !phone) {
+                  setError('이름과 전화번호를 입력해주세요.');
+                  return;
+                }
+                setError('');
+                nextStep();
+              }}>
+                다음
+              </button>
             </>
           )}
           {step === 2 && (
             <>
+              <div className={styles.inputGroup}>
               <input
                 type="text"
-                name="store_name"
                 placeholder="가게 이름"
-                value={formData.store_name}
-                onChange={handleChange}
+                  value={storeName}
+                  onChange={(e) => setStoreName(e.target.value)}
+                  className={styles.input}
                 required
               />
-              <input
-                type="text"
-                name="store_address"
-                placeholder="가게 주소"
-                value={formData.store_address}
-                onChange={handleChange}
-                required
-              />
-              <div className="step-buttons">
-                <button type="button" onClick={prevStep}>이전</button>
-                <button type="button" onClick={nextStep}>다음</button>
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button type="button" className={styles.button} style={{ flex: 1, background: '#e5e7eb', color: '#222' }} onClick={prevStep}>
+                  이전
+                </button>
+                <button type="button" className={styles.button} style={{ flex: 1 }} onClick={() => {
+                  if (!storeName) {
+                    setError('가게 이름을 입력해주세요.');
+                    return;
+                  }
+                  setError('');
+                  nextStep();
+                }}>
+                  다음
+                </button>
               </div>
             </>
           )}
           {step === 3 && (
             <>
+              <div className={styles.inputGroup}>
               <input
-                type="text"
-                name="email"
+                  type="email"
                 placeholder="이메일"
-                value={formData.email}
-                onChange={handleChange}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className={styles.input}
                 required
               />
+              </div>
+              <div className={styles.inputGroup}>
               <input
                 type="password"
-                name="password"
-                placeholder="비밀번호"
-                value={formData.password}
-                onChange={handleChange}
+                  placeholder="비밀번호 (6자리 이상)"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={styles.input}
                 required
               />
-              <input
-                type="password"
-                name="confirmPassword"
-                placeholder="비밀번호 확인"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                required
-              />
-              <div className="step-buttons">
-                <button type="button" onClick={prevStep}>이전</button>
-                <button type="submit">회원가입</button>
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button type="button" className={styles.button} style={{ flex: 1, background: '#e5e7eb', color: '#222' }} onClick={prevStep}>
+                  이전
+                </button>
+                <button type="submit" className={styles.button} style={{ flex: 1 }}>
+                  회원가입
+                </button>
               </div>
             </>
           )}
+          {error && <p className={styles.errorText}>{error}</p>}
         </form>
-        <p className="login-link">
-          이미 계정이 있으신가요? <a href="/login">로그인</a>
+        <p className={styles.linkText}>
+          이미 계정이 있으신가요? <Link to="/login">로그인</Link>
         </p>
       </div>
     </div>
   );
 }
-
-export default RegisterPage; 

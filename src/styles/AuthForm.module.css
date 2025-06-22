@@ -1,0 +1,85 @@
+.container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: #f9fafb;
+  padding: 20px;
+}
+
+.formWrapper {
+  background-color: white;
+  padding: 40px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  width: 100%;
+  max-width: 450px;
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 30px;
+  color: #1f2937;
+}
+
+.inputGroup {
+  margin-bottom: 20px;
+}
+
+.input {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.button {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 8px;
+  background-color: #22c55e;
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.button:hover {
+  background-color: #16a34a;
+}
+
+.linkText {
+  margin-top: 25px;
+  text-align: center;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.linkText a {
+  color: #3b82f6;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.linkText a:hover {
+  text-decoration: underline;
+}
+
+.errorText {
+    color: #ef4444;
+    text-align: center;
+    margin-top: 15px;
+    font-size: 14px;
+} 

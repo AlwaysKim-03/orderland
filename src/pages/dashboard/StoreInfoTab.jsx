@@ -16,15 +16,15 @@ export default function StoreInfoTab({ userInfo, onStoreUpdate }) {
     phone: '',
     tableCount: 1
   });
-
+  
   // userInfo가 업데이트되면 form 상태를 동기화
   useEffect(() => {
     if (userInfo) {
-      setForm({
+        setForm({
         store_name: userInfo.store_name || '',
         phone: userInfo.phone || '',
         tableCount: userInfo.tableCount || 1
-      });
+        });
     }
   }, [userInfo]);
 

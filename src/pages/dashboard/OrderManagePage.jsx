@@ -138,7 +138,7 @@ function OrderDetailModal({ isOpen, onClose, orders, tableNumber, storeId }) {
         { key: weekKey, period: 'week' },
         { key: monthKey, period: 'month' }
       ];
-      
+
       // 각 기간별로 집계 데이터 업데이트
       for (const { key, period } of periods) {
         const summaryRef = doc(db, "sales_summary", `${storeId}_${key}`);
@@ -185,11 +185,11 @@ function OrderDetailModal({ isOpen, onClose, orders, tableNumber, storeId }) {
       await Promise.all(batch);
       
       // 매출 집계 데이터 업데이트
-      for (const order of orders) {
+    for (const order of orders) {
         await updateSalesSummary(storeId, order);
-      }
+    }
       
-      onClose();
+    onClose();
     } catch (err) {
       console.error("계산 완료 처리 실패:", err);
       alert("계산 완료 처리에 실패했습니다.");
@@ -203,20 +203,20 @@ function OrderDetailModal({ isOpen, onClose, orders, tableNumber, storeId }) {
         <div style={{ flex: 1.2, padding: 32, borderRight: '1px solid #eee', display: 'flex', flexDirection: 'column' }}>
           <h3 style={{ marginTop: 0, marginBottom: 24 }}>주문내역 (테이블 {tableNumber})</h3>
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            {orders.length === 0 ? (
-              <div style={{ color: '#888', textAlign: 'center', margin: '40px 0' }}>주문이 없습니다.</div>
-            ) : (
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+          {orders.length === 0 ? (
+            <div style={{ color: '#888', textAlign: 'center', margin: '40px 0' }}>주문이 없습니다.</div>
+          ) : (
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {orders.map((order) => 
                   getOrderItems(order).map((item, i) => (
                     <li key={`${order.id}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, borderBottom: '1px solid #f1f1f1', paddingBottom: 8 }}>
                       <span>{item.name} x {item.quantity}</span>
-                      <span>{(item.price * item.quantity).toLocaleString()}원</span>
-                    </li>
+                        <span>{(item.price * item.quantity).toLocaleString()}원</span>
+                  </li>
                   ))
                 )}
-              </ul>
-            )}
+            </ul>
+          )}
           </div>
           <div style={{ marginTop: 24, fontWeight: 700, fontSize: 20, textAlign: 'right' }}>총액: {total.toLocaleString()}원</div>
         </div>
@@ -224,8 +224,8 @@ function OrderDetailModal({ isOpen, onClose, orders, tableNumber, storeId }) {
         <div style={{ flex: 1, padding: 32, display: 'flex', flexDirection: 'column' }}>
            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
              <h4 style={{ margin: 0 }}>메뉴 추가</h4>
-             <button onClick={onClose} style={{ background: 'none', color: '#888', border: 'none', fontSize: 28, fontWeight: 700, cursor: 'pointer', lineHeight: 1 }}>×</button>
-           </div>
+            <button onClick={onClose} style={{ background: 'none', color: '#888', border: 'none', fontSize: 28, fontWeight: 700, cursor: 'pointer', lineHeight: 1 }}>×</button>
+          </div>
           <div style={{ flex: 1, maxHeight: 450, overflowY: 'auto' }}>
             {menuList.length === 0 ? (
               <div>등록된 메뉴가 없습니다.</div>
@@ -248,7 +248,7 @@ function OrderDetailModal({ isOpen, onClose, orders, tableNumber, storeId }) {
           </div>
            <div style={{marginTop: 24, display: 'flex', justifyContent: 'flex-end', gap: 12}}>
               <button onClick={handleCheckout} style={{ padding: '10px 20px', background: '#22c55e', color: 'white', border: 'none', borderRadius: 8, fontSize: 16, fontWeight: 'bold' }}>계산 완료</button>
-           </div>
+          </div>
         </div>
       </div>
     </div>
@@ -275,7 +275,7 @@ export default function OrderManagePage({ orders: allOrders = [], userInfo, onUs
     });
     return () => unsubscribe();
   }, []);
-  
+
   // 테이블별로 주문 필터링 ('completed' 아닌 것만)
   const getTableOrders = useCallback((tableNumber) => {
     return allOrders
@@ -353,8 +353,8 @@ export default function OrderManagePage({ orders: allOrders = [], userInfo, onUs
           <h3>테이블별 주문 현황</h3>
           <div>
             <label>테이블 수: </label>
-            <input 
-              type="number" 
+          <input
+            type="number"
               value={tableCountInput}
               onChange={e => setTableCountInput(e.target.value)}
               style={{width: '60px', padding: '4px 8px', marginRight: '8px'}}
@@ -363,8 +363,8 @@ export default function OrderManagePage({ orders: allOrders = [], userInfo, onUs
           </div>
         </div>
         <div style={{
-          display: 'flex',
-          flexWrap: 'wrap',
+            display: 'flex',
+            flexWrap: 'wrap',
           gap: '16px',
           marginTop: '20px',
         }}>
@@ -375,7 +375,7 @@ export default function OrderManagePage({ orders: allOrders = [], userInfo, onUs
             const isNew = tableOrders.some(o => o.status === 'new');
 
             return (
-              <div 
+              <div
                 key={tableNum} 
                 onClick={() => handleTableClick(tableNum)}
                 style={{
@@ -416,7 +416,7 @@ export default function OrderManagePage({ orders: allOrders = [], userInfo, onUs
                         </li>
                       )}
                     </ul>
-                  </div>
+                          </div>
                 )}
                 
                 {items.length > 0 && (

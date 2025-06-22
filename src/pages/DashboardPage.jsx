@@ -208,7 +208,7 @@ export default function DashboardPage() {
   };
 
   const handleLogout = async () => {
-    try {
+      try {
       await signOut(auth);
       // 로그아웃 성공 후 로그인 페이지로 이동합니다.
       // 이 부분이 누락되었을 수 있습니다.
@@ -216,8 +216,8 @@ export default function DashboardPage() {
     } catch (error) {
       console.error("로그아웃 실패:", error);
       alert("로그아웃에 실패했습니다: " + error.message);
-    }
-  };
+      }
+    };
 
   const handleAcknowledgeCall = async (callId) => {
     try {
