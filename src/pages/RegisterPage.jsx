@@ -4,6 +4,7 @@ import { auth, db } from "../firebase"; // Firebase auth 및 db 객체 가져오
 import { createUserWithEmailAndPassword } from "firebase/auth"; // Firebase 회원가입 함수
 import { doc, setDoc } from "firebase/firestore"; // Firestore 데이터 저장 함수
 import styles from '../styles/AuthForm.module.css';
+import { FaEye, FaEyeSlash } from 'react-icons/fa'; // 아이콘 추가
 
 export default function RegisterPage() {
   const [step, setStep] = useState(1);
@@ -12,6 +13,8 @@ export default function RegisterPage() {
   const [storeName, setStoreName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState(''); // 비밀번호 확인 상태
+  const [showPassword, setShowPassword] = useState(false); // 비밀번호 보기 상태
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -20,8 +23,12 @@ export default function RegisterPage() {
 
   const handleRegister = async (e) => {
     e.preventDefault();
-    if (!name || !phone || !storeName || !email || !password) {
+    if (!name || !phone || !storeName || !email || !password || !confirmPassword) {
       setError('모든 필드를 입력해주세요.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('비밀번호가 일치하지 않습니다.');
       return;
     }
     try {
@@ -132,15 +139,39 @@ export default function RegisterPage() {
                 required
               />
               </div>
-              <div className={styles.inputGroup}>
-              <input
-                type="password"
+              <div className={styles.inputGroup} style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="비밀번호 (6자리 이상)"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className={styles.input}
-                required
-              />
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  {showPassword ? <FaEyeSlash /> : <FaEye />}
+                </button>
+              </div>
+              <div className={styles.inputGroup} style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="비밀번호 확인"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={styles.input}
+                  required
+                />
+                 <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  {showPassword ? <FaEyeSlash /> : <FaEye />}
+                </button>
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button type="button" className={styles.button} style={{ flex: 1, background: '#e5e7eb', color: '#222' }} onClick={prevStep}>

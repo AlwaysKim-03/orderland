@@ -11,7 +11,7 @@ import {
   updateDoc,
   orderBy
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 
 // --- 스타일 컴포넌트 ---
 const styles = {
@@ -49,185 +49,126 @@ function toSlug(str) {
   return String(str).trim().toLowerCase().replace(/\s+/g, '-');
 }
 
-export default function MenuTab({ categories, products, onMenuUpdate }) {
-  const [activeCategory, setActiveCategory] = useState(null);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [newProductName, setNewProductName] = useState("");
-  const [newProductPrice, setNewProductPrice] = useState("");
-  const [editingCategory, setEditingCategory] = useState(null);
-  const [editingProduct, setEditingProduct] = useState(null);
-  const [productImageFile, setProductImageFile] = useState(null);
+// --- ProductModal 컴포넌트 ---
+function ProductModal({ isOpen, onClose, product, categories, onSave, onDelete }) {
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+  const [category, setCategory] = useState('');
+  const [imageFile, setImageFile] = useState(null);
+  const [imageUrl, setImageUrl] = useState('');
 
-  // 첫 번째 카테고리를 기본으로 선택
   useEffect(() => {
-    if (categories.length > 0 && !activeCategory) {
-      setActiveCategory(categories[0]);
-    } else if (categories.length > 0 && activeCategory) {
-      // 카테고리 목록이 변경되었을 때, 현재 선택된 activeCategory가 여전히 유효한지 확인
-      const updatedActiveCategory = categories.find(c => c.id === activeCategory.id);
-      if (updatedActiveCategory) {
-        setActiveCategory(updatedActiveCategory);
+    if (isOpen) {
+      if (product) {
+        setName(product.name);
+        setPrice(product.price);
+        setCategory(product.category);
+        setImageUrl(product.imageUrl || '');
       } else {
-        setActiveCategory(categories[0]);
+        setName('');
+        setPrice('');
+        setCategory(categories.length > 0 ? categories[0].name : '');
+        setImageUrl('');
       }
-    } else if (categories.length === 0) {
-      setActiveCategory(null);
+      setImageFile(null);
     }
-  }, [categories, activeCategory]);
+  }, [isOpen, product, categories]);
 
-  // --- Event Handlers ---
-  const handleAddCategory = async () => {
-    if (!newCategoryName.trim()) return;
+  const handleSave = async () => {
+    if (!name.trim() || !price || !category) return alert('모든 필드를 입력하세요.');
     const currentUser = auth.currentUser;
     if (!currentUser) return;
 
     try {
-      await addDoc(collection(db, "categories"), {
-        name: newCategoryName,
+      let uploadedImageUrl = product?.imageUrl || '';
+      if (imageFile) {
+        const imageRef = ref(storage, `products/${currentUser.uid}/${Date.now()}_${imageFile.name}`);
+        const snapshot = await uploadBytes(imageRef, imageFile);
+        uploadedImageUrl = await getDownloadURL(snapshot.ref);
+      }
+      
+      const productData = {
+        name,
+        price: Number(price),
+        category,
         storeId: currentUser.uid,
-        createdAt: new Date(),
-      });
-      setNewCategoryName("");
-      onMenuUpdate(); // 데이터 리프레시
+        imageUrl: uploadedImageUrl,
+      };
+
+      if (product) {
+        await updateDoc(doc(db, "products", product.id), productData);
+      } else {
+        await addDoc(collection(db, "products"), { ...productData, createdAt: new Date() });
+      }
+      onSave();
+      onClose();
     } catch (error) {
-      console.error("카테고리 추가 실패: ", error);
+      console.error('메뉴 저장 실패:', error);
+      alert('메뉴 저장에 실패했습니다.');
     }
   };
 
-  const handleDeleteCategory = async (categoryId) => {
-    if (!window.confirm("카테고리를 삭제하면 속한 메뉴도 모두 삭제됩니다. 계속하시겠습니까?")) return;
-    // ... (삭제 로직은 동일, 마지막에 onMenuUpdate() 호출)
-    try {
-      // Firestore 트랜잭션을 사용하면 더 안전하지만, 우선 개별 삭제로 구현
-      // 1. 카테고리에 속한 상품들 삭제
-      const productsToDelete = products.filter(p => p.category === activeCategory.name);
-      for (const product of productsToDelete) {
-        await deleteDoc(doc(db, "products", product.id));
-      }
-      // 2. 카테고리 삭제
-      await deleteDoc(doc(db, "categories", categoryId));
-      onMenuUpdate();
-    } catch (error) {
-      console.error("카테고리 삭제 실패:", error);
-    }
-  };
-  
-  // (생략) ... handleUpdateCategory, handleAddProduct, handleUpdateProduct, handleDeleteProduct 등
-  // 모든 CUD(Create, Update, Delete) 함수의 마지막에 onMenuUpdate()를 호출하도록 수정합니다.
-  
-  // --- Filtered Menus ---
-  const filteredMenus = useMemo(() => {
-    if (!activeCategory) return products;
-    return products.filter(menu => menu.category === activeCategory.name);
-  }, [products, activeCategory]);
+  if (!isOpen) return null;
 
   return (
-    <div style={styles.container}>
-      {/* Left Sidebar: Categories */}
-      <aside style={styles.sidebar}>
-        <h3 style={{ marginTop: 0 }}>카테고리</h3>
-        <ul style={styles.categoryList}>
-          <li style={styles.categoryItem(activeCategory === null)} onClick={() => setActiveCategory(null)}>전체 메뉴</li>
-          {categories.map(cat => (
-            <li key={cat.id} style={{...styles.categoryItem(activeCategory?.id === cat.id), display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                <span style={{flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}} onClick={() => setActiveCategory(cat)}>
-                    {cat.name}
-                </span>
-                <button 
-                    title={`${cat.name} 카테고리 삭제`}
-                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', paddingLeft: '10px', fontWeight: 'bold' }}
-                    onClick={() => handleDeleteCategory(cat.id)}>
-                    삭제
-                </button>
-            </li>
-          ))}
-        </ul>
-        <button style={{...styles.button, background: '#10b981'}} onClick={() => setEditingCategory(null)}>+ 새 카테고리</button>
-      </aside>
-
-      {/* Main Content: Menus */}
-      <main style={styles.mainContent}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ marginTop: 0 }}>
-            {activeCategory ? `${activeCategory.name} 메뉴` : '전체 메뉴'} ({filteredMenus.length})
-          </h3>
-          <button style={styles.button} onClick={() => setEditingProduct(null)}>+ 새 메뉴 추가</button>
-        </div>
-        <table style={styles.table}>
-        <thead>
-            <tr>
-              <th style={{...styles.th, width: '80px'}}>사진</th>
-              <th style={styles.th}>이름</th><th style={styles.th}>가격</th><th style={styles.th}>카테고리</th><th style={styles.th}>작업</th>
-          </tr>
-        </thead>
-        <tbody>
-            {filteredMenus.map((menu) => (
-              <tr key={menu.id}>
-                <td style={styles.td}>
-                  {menu.imageUrl ? (
-                    <img src={menu.imageUrl} alt={menu.name} style={styles.menuImage} />
-                  ) : (
-                    <div style={{...styles.menuImage, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: '12px'}}>No img</div>
-                )}
-              </td>
-                <td style={styles.td}>{menu.name}</td>
-                <td style={styles.td}>{menu.price.toLocaleString()}원</td>
-                <td style={styles.td}>{menu.category}</td>
-                <td style={styles.td}>
-                  <button onClick={() => setEditingProduct(menu)} style={{marginRight: '8px'}}>수정</button>
-                    <button onClick={async () => {
-                      if (!window.confirm("정말로 메뉴를 삭제하시겠습니까?")) return;
-                      await deleteDoc(doc(db, "products", menu.id));
-                      onMenuUpdate();
-                  }}>삭제</button>
-                  </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      </main>
-
-      {/* Category Add/Edit Modal */}
-      {editingCategory && (
-        <CategoryModal 
-          isOpen={editingCategory !== null}
-          onClose={() => setEditingCategory(null)}
-          category={editingCategory}
-          onSave={onMenuUpdate}
-        />
+    <div style={styles.modalBackdrop}>
+      <div style={styles.modalContent}>
+        <h3>{product ? '메뉴 수정' : '새 메뉴 추가'}</h3>
+        <input type="text" placeholder="메뉴 이름" value={name} onChange={e => setName(e.target.value)} style={styles.input} />
+        <input type="number" placeholder="가격" value={price} onChange={e => setPrice(e.target.value)} style={styles.input} />
+        <select value={category} onChange={e => setCategory(e.target.value)} style={styles.select}>
+          {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
+        </select>
+        <input type="file" onChange={e => setImageFile(e.target.files[0])} style={{ ...styles.input, border: 'none' }} />
+        {imageUrl && !imageFile && <img src={imageUrl} alt="메뉴 이미지" style={styles.imagePreview} />}
+        {imageFile && <img src={URL.createObjectURL(imageFile)} alt="새 이미지 미리보기" style={styles.imagePreview} />}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
+          <div>
+            {product && (
+              <button
+                onClick={() => {
+                  if (window.confirm("정말로 이 메뉴를 삭제하시겠습니까?")) {
+                    onDelete(product);
+                    onClose();
+                  }
+                }}
+                style={{ ...styles.button, background: '#ef4444', color: 'white' }}
+              >
+                삭제
+              </button>
             )}
           </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={onClose}>취소</button>
+            <button onClick={handleSave} style={styles.button}>저장</button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
-// --- Sub-component: CategoryModal ---
+// --- CategoryModal 컴포넌트 ---
 function CategoryModal({ isOpen, onClose, category, onSave }) {
     const [name, setName] = useState('');
 
     useEffect(() => {
-        if (category) {
-            setName(category.name);
-        } else {
-            setName('');
+        if (isOpen) {
+            setName(category ? category.name : '');
         }
     }, [category, isOpen]);
 
     const handleSave = async () => {
         if (!name.trim()) return alert('카테고리 이름을 입력하세요.');
+        const currentUser = auth.currentUser;
+        if (!currentUser) return;
+        
         try {
-            const currentUser = auth.currentUser;
-            if (!currentUser) return;
-
-            const categoryData = {
-                name,
-                storeId: currentUser.uid,
-                createdAt: new Date()
-            };
-
+            const categoryData = { name, storeId: currentUser.uid };
             if (category) {
                 await updateDoc(doc(db, "categories", category.id), categoryData);
             } else {
-                await addDoc(collection(db, "categories"), categoryData);
+                await addDoc(collection(db, "categories"), { ...categoryData, createdAt: new Date() });
             }
             onSave();
             onClose();
@@ -244,18 +185,178 @@ function CategoryModal({ isOpen, onClose, category, onSave }) {
             <div style={styles.modalContent}>
                 <h3 style={{marginTop: 0}}>{category ? '카테고리 수정' : '새 카테고리 추가'}</h3>
                 <label>카테고리 이름</label>
-                <input 
-                    type="text" 
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="카테고리 이름"
-                    style={styles.input}
-                />
-                <div style={{display: 'flex', justifyContent: 'flex-end', gap: '10px'}}>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} style={styles.input} />
+                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
                     <button onClick={onClose}>취소</button>
-                    <button style={styles.button} onClick={handleSave}>저장</button>
+                    <button onClick={handleSave} style={styles.button}>저장</button>
                 </div>
-      </div>
+            </div>
+        </div>
+    );
+}
+
+export default function MenuTab({ categories, products, onMenuUpdate }) {
+  const [activeCategory, setActiveCategory] = useState(null);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
+
+  useEffect(() => {
+    if (categories.length > 0 && !activeCategory) {
+      setActiveCategory(categories[0]);
+    } else if (categories.length > 0 && activeCategory) {
+      const updatedActiveCategory = categories.find(c => c.id === activeCategory.id);
+      setActiveCategory(updatedActiveCategory || categories[0]);
+    } else if (categories.length === 0) {
+      setActiveCategory(null);
+    }
+  }, [categories]);
+
+  const handleDeleteCategory = async (categoryId, categoryName) => {
+    if (!window.confirm(`'${categoryName}' 카테고리를 삭제하면 속한 메뉴도 모두 삭제됩니다. 계속하시겠습니까?`)) return;
+    try {
+      const productsToDelete = products.filter(p => p.category === categoryName);
+      for (const product of productsToDelete) {
+        if (product.imageUrl) {
+          try {
+            const imageRef = ref(storage, product.imageUrl);
+            await deleteObject(imageRef);
+          } catch (storageError) {
+             console.error("이미지 삭제 실패:", storageError);
+          }
+        }
+        await deleteDoc(doc(db, "products", product.id));
+      }
+      await deleteDoc(doc(db, "categories", categoryId));
+      onMenuUpdate();
+    } catch (error) {
+      console.error("카테고리 삭제 실패:", error);
+      alert("카테고리 삭제에 실패했습니다.");
+    }
+  };
+
+  const handleDeleteProduct = async (product) => {
+     try {
+       if (product.imageUrl) {
+         const imageRef = ref(storage, product.imageUrl);
+         await deleteObject(imageRef);
+       }
+      await deleteDoc(doc(db, "products", product.id));
+      onMenuUpdate();
+    } catch (error) {
+       console.error("메뉴 삭제 실패:", error);
+       alert("메뉴 삭제에 실패했습니다.");
+    }
+  };
+
+  const filteredMenus = useMemo(() => {
+    if (!activeCategory) return products;
+    return products.filter(menu => menu.category === activeCategory.name);
+  }, [products, activeCategory]);
+
+  const openCategoryModal = (category = null) => {
+    setEditingCategory(category);
+    setIsCategoryModalOpen(true);
+  };
+  
+  const openProductModal = (product = null) => {
+    setEditingProduct(product);
+    setIsProductModalOpen(true);
+  };
+
+  return (
+    <div style={styles.container}>
+      {/* Categories Sidebar */}
+      <aside style={styles.sidebar}>
+        <h3>카테고리</h3>
+        <ul style={styles.categoryList}>
+          <li style={styles.categoryItem(activeCategory === null)} onClick={() => setActiveCategory(null)}>전체 메뉴</li>
+          {categories.map(cat => (
+            <li 
+              key={cat.id} 
+              style={{...styles.categoryItem(activeCategory?.id === cat.id), display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}
+              onClick={() => setActiveCategory(cat)}
+            >
+              <span>{cat.name}</span>
+              <button 
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: activeCategory?.id === cat.id ? '#fca5a5' : '#ef4444',
+                  cursor: 'pointer',
+                  padding: '0 0 0 10px',
+                  fontSize: '14px',
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteCategory(cat.id, cat.name);
+                }}>삭제</button>
+            </li>
+          ))}
+        </ul>
+        <button onClick={() => openCategoryModal()} style={styles.button}>+ 새 카테고리</button>
+      </aside>
+
+      {/* Menus Main Content */}
+      <main style={styles.mainContent}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3>메뉴</h3>
+          <button onClick={() => openProductModal()} style={styles.button}>+ 새 메뉴 추가</button>
+        </div>
+        <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={styles.th}>사진</th><th style={styles.th}>이름</th><th style={styles.th}>가격</th><th style={styles.th}>작업</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredMenus.map((menu) => (
+              <tr key={menu.id}>
+                <td style={styles.td}>
+                  <div style={{
+                    width: '60px',
+                    height: '60px',
+                    background: '#f1f5f9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    {menu.imageUrl ? (
+                      <img src={menu.imageUrl} alt={menu.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <span style={{ color: '#9ca3af', fontSize: '12px' }}>No img</span>
+                    )}
+                  </div>
+                </td>
+                <td>{menu.name}</td>
+                <td>{Number(menu.price).toLocaleString()}원</td>
+                <td>
+                  <button style={{marginRight: '8px', cursor: 'pointer'}} onClick={() => openProductModal(menu)}>수정</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </main>
+
+      {/* Modals */}
+      <CategoryModal 
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        category={editingCategory}
+        onSave={onMenuUpdate}
+      />
+      <ProductModal 
+        isOpen={isProductModalOpen}
+        onClose={() => setIsProductModalOpen(false)}
+        product={editingProduct}
+        categories={categories}
+        onSave={onMenuUpdate}
+        onDelete={handleDeleteProduct}
+      />
     </div>
   );
 } 

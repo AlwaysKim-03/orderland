@@ -87,12 +87,13 @@ function OrderDetailModal({ isOpen, onClose, orders, tableNumber, storeId }) {
       const primaryOrder = orders[0]; // 가장 최근 주문에 추가
       const orderRef = doc(db, "orders", primaryOrder.id);
       
-      const newItems = [...getOrderItems(primaryOrder), { name: menu.name, price: menu.price, quantity: qty }];
+      const currentItems = getOrderItems(primaryOrder);
+      const newItems = [...currentItems, { id: menu.id, name: menu.name, price: Number(menu.price), quantity: qty }];
       const newTotal = newItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
       try {
         await updateDoc(orderRef, {
-          orders: newItems,
+          items: newItems,
           totalAmount: newTotal,
         });
       } catch (err) {
@@ -105,8 +106,8 @@ function OrderDetailModal({ isOpen, onClose, orders, tableNumber, storeId }) {
         await addDoc(collection(db, "orders"), {
           storeId: storeId,
           tableNumber: tableNumber,
-          orders: [{ name: menu.name, price: menu.price, quantity: qty }],
-          totalAmount: menu.price * qty,
+          items: [{ id: menu.id, name: menu.name, price: Number(menu.price), quantity: qty }],
+          totalAmount: Number(menu.price) * qty,
           status: 'new',
           createdAt: new Date(),
         });
@@ -115,7 +116,7 @@ function OrderDetailModal({ isOpen, onClose, orders, tableNumber, storeId }) {
         alert("새 주문 생성에 실패했습니다.");
       }
     }
-    onClose(); // 성공 여부와 관계없이 모달을 닫아 데이터 리프레시
+    // onClose(); // 성공 여부와 관계없이 모달을 닫아 데이터 리프레시 -> 사용자의 요청으로 주석 처리
   };
 
   // 매출 집계 데이터 업데이트 함수
@@ -132,7 +133,7 @@ function OrderDetailModal({ isOpen, onClose, orders, tableNumber, storeId }) {
       const weekKey = `week-${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
       
       const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-      
+
       const periods = [
         { key: todayKey, period: 'today' },
         { key: weekKey, period: 'week' },

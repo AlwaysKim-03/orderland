@@ -3,7 +3,7 @@ import React from 'react';
 export default function OrderSummaryModal({ isOpen, onClose, orders, onUpdateQuantity, onRemoveOrder, onOrder }) {
   if (!isOpen) return null;
 
-  const totalAmount = orders.reduce((sum, order) => sum + (order.price * order.quantity), 0);
+  const totalAmount = orders.reduce((sum, order) => sum + (order.price * order.count), 0);
 
   return (
     <div style={{
@@ -133,7 +133,7 @@ export default function OrderSummaryModal({ isOpen, onClose, orders, onUpdateQua
                     gap: '8px'
                   }}>
                     <button
-                      onClick={() => onUpdateQuantity(order.id, order.quantity - 1)}
+                      onClick={() => onUpdateQuantity(order.id, order.count - 1)}
                       style={{
                         padding: '6px 12px',
                         background: '#f1f5f9',
@@ -154,10 +154,10 @@ export default function OrderSummaryModal({ isOpen, onClose, orders, onUpdateQua
                       fontWeight: '600',
                       color: '#1e293b'
                     }}>
-                      {order.quantity}
+                      {order.count}
                     </span>
                     <button
-                      onClick={() => onUpdateQuantity(order.id, order.quantity + 1)}
+                      onClick={() => onUpdateQuantity(order.id, order.count + 1)}
                       style={{
                         padding: '6px 12px',
                         background: '#f1f5f9',

@@ -232,7 +232,7 @@ export default function OrderPage() {
       if (exists) {
         return prev.map(item => item.id === menu.id ? { ...item, count: item.count + quantity } : item);
       } else {
-        return [...prev, { ...menu, count: quantity }];
+        return [...prev, { ...menu, price: Number(menu.price), count: quantity }];
       }
     });
     setMenuQuantities(prev => ({ ...prev, [menu.id]: 1 }));
@@ -303,12 +303,11 @@ export default function OrderPage() {
       alert("오류: 가게 또는 테이블 정보가 없습니다.");
       return;
     }
-    const callMessage = window.prompt("직원에게 전달할 메시지를 입력하세요 (예: 숟가락 좀 주세요).");
     try {
       await addDoc(collection(db, "staff_calls"), {
         storeId,
         tableNumber: tableId,
-        message: callMessage || '직원 호출',
+        message: '직원 호출',
         status: 'new',
         createdAt: new Date(),
       });
