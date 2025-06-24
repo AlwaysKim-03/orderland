@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import OrderSummaryModal from '../components/OrderSummaryModal';
+import PaymentModal from '../components/PaymentModal';
 import styles from './OrderPage.module.css';
 import { db } from '../firebase'; // Firebase db 객체 가져오기
 import { collection, query, where, getDocs, addDoc, onSnapshot, orderBy } from 'firebase/firestore';
@@ -107,6 +108,7 @@ export default function OrderPage() {
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [orderHistory, setOrderHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -269,32 +271,40 @@ export default function OrderPage() {
       alert('가게 정보가 올바르지 않아 주문할 수 없습니다.');
       return;
     }
+    
+    // 결제 모달 열기
+    setIsPaymentOpen(true);
+    setIsCartOpen(false);
+  };
+
+  // 결제 성공 처리
+  const handlePaymentSuccess = async (paymentResponse) => {
     try {
       const orderData = {
         storeId: storeId,
         tableNumber: tableId,
         items: cart.map(item => ({
-          id: item.id, // product id
+          id: item.id,
           name: item.name,
           category: item.category || '',
           price: Number(item.price),
           quantity: Number(item.count)
         })),
         totalAmount: cart.reduce((sum, item) => sum + item.count * Number(item.price), 0),
-        status: 'new', // 'new', 'processing', 'completed'
+        status: 'new',
+        paymentStatus: 'paid',
+        paymentId: paymentResponse.imp_uid,
         createdAt: new Date()
       };
       
       await addDoc(collection(db, "orders"), orderData);
       
       // 성공 후 처리
-        setCart([]);
-        setIsCartOpen(false);
-        alert('주문이 접수되었습니다!');
-
+      setCart([]);
+      alert('주문과 결제가 완료되었습니다!');
     } catch (err) {
-      console.error("Firestore 주문 제출 실패:", err);
-      alert('주문 실패: ' + err.message);
+      console.error("주문 저장 실패:", err);
+      alert('주문 저장에 실패했습니다. 관리자에게 문의해주세요.');
     }
   };
 
@@ -398,6 +408,21 @@ export default function OrderPage() {
         storeId={storeId}
         tableId={tableId}
       />
+      
+      <PaymentModal
+        isOpen={isPaymentOpen}
+        onClose={() => setIsPaymentOpen(false)}
+        orderData={{
+          items: cart,
+          totalAmount: cartTotal,
+          storeName: storeName,
+          buyerEmail: 'customer@example.com', // 실제로는 사용자 입력 받아야 함
+          buyerName: '고객',
+          buyerTel: '010-1234-5678'
+        }}
+        onPaymentSuccess={handlePaymentSuccess}
+      />
+      
        <OrderHistoryModal
         isOpen={isHistoryOpen}
         onClose={() => setIsHistoryOpen(false)}
