@@ -284,11 +284,9 @@ export default function OrderPage() {
         storeId: storeId,
         tableNumber: tableId,
         items: cart.map(item => ({
-          id: item.id,
-          name: item.name,
-          category: item.category || '',
-          price: Number(item.price),
-          quantity: Number(item.count)
+          ...item,
+          quantity: item.count,
+          price: Number(item.price)
         })),
         totalAmount: cart.reduce((sum, item) => sum + item.count * Number(item.price), 0),
         status: 'new',
@@ -413,7 +411,11 @@ export default function OrderPage() {
         isOpen={isPaymentOpen}
         onClose={() => setIsPaymentOpen(false)}
         orderData={{
-          items: cart,
+          items: cart.map(item => ({
+            ...item,
+            quantity: item.count,
+            price: Number(item.price)
+          })),
           totalAmount: cartTotal,
           storeName: storeName,
           buyerEmail: 'customer@example.com', // 실제로는 사용자 입력 받아야 함
