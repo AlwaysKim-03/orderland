@@ -9,6 +9,30 @@ function toSlug(str) {
   return String(str).trim().replace(/\s+/g, '-');
 }
 
+// 010-xxxx-xxxx 형식으로 변환하는 함수
+function formatPhoneForDisplay(phone) {
+  if (!phone) return '';
+  // 국제번호(+82) → 010-xxxx-xxxx 변환
+  if (phone.startsWith('+82')) {
+    const rest = phone.slice(3); // 예: 1012345678
+    if (rest.length === 10) {
+      // 10자리: 1012345678 → 010-1234-5678
+      return '010-' + rest.slice(1, 5) + '-' + rest.slice(5, 9);
+    } else if (rest.length === 9) {
+      // 9자리: 101234567 → 010-1234-567
+      return '010-' + rest.slice(1, 5) + '-' + rest.slice(5);
+    }
+    // 그 외는 fallback
+    return '010-' + rest;
+  }
+  // 이미 010으로 시작하면 하이픈 추가
+  const onlyNums = phone.replace(/\D/g, '');
+  if (onlyNums.length === 11 && onlyNums.startsWith('010')) {
+    return onlyNums.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
+  }
+  return phone;
+}
+
 export default function StoreInfoTab({ userInfo, onStoreUpdate }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
@@ -97,7 +121,8 @@ export default function StoreInfoTab({ userInfo, onStoreUpdate }) {
       ) : (
         <div>
           <p><strong>가게명:</strong> {userInfo.store_name}</p>
-          <p><strong>전화번호:</strong> {userInfo.phone}</p>
+          <p><strong>전화번호:</strong> {formatPhoneForDisplay(userInfo.phone)}</p>
+          <p><strong>계정(이메일):</strong> {userInfo.email}</p>
           <p><strong>테이블 수:</strong> {userInfo.tableCount}</p>
         </div>
       )}

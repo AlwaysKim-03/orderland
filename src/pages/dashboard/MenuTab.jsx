@@ -11,7 +11,7 @@ import {
   updateDoc,
   orderBy
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // --- 스타일 컴포넌트 ---
 const styles = {
@@ -49,6 +49,13 @@ function toSlug(str) {
   return String(str).trim().toLowerCase().replace(/\s+/g, '-');
 }
 
+// Firebase Storage 이미지 업로드 공식 예제 함수
+async function uploadMenuImage(file, userId, storage) {
+  const imageRef = ref(storage, `products/${userId}/${Date.now()}_${file.name}`);
+  const snapshot = await uploadBytes(imageRef, file);
+  return await getDownloadURL(snapshot.ref);
+}
+
 // --- ProductModal 컴포넌트 ---
 function ProductModal({ isOpen, onClose, product, categories, onSave, onDelete }) {
   const [name, setName] = useState('');
@@ -82,11 +89,17 @@ function ProductModal({ isOpen, onClose, product, categories, onSave, onDelete }
     try {
       let uploadedImageUrl = product?.imageUrl || '';
       if (imageFile) {
-        const imageRef = ref(storage, `products/${currentUser.uid}/${Date.now()}_${imageFile.name}`);
-        const snapshot = await uploadBytes(imageRef, imageFile);
-        uploadedImageUrl = await getDownloadURL(snapshot.ref);
+        console.log('[이미지 업로드] 파일 선택됨:', imageFile);
+        try {
+          console.log('[이미지 업로드] 업로드 시작');
+          uploadedImageUrl = await uploadMenuImage(imageFile, currentUser.uid, storage);
+          console.log('[이미지 업로드] 업로드 성공, URL:', uploadedImageUrl);
+        } catch (uploadErr) {
+          console.error('[이미지 업로드] 업로드 실패:', uploadErr);
+          alert('이미지 업로드에 실패했습니다.');
+          return;
+        }
       }
-      
       const productData = {
         name,
         price: Number(price),
@@ -94,16 +107,23 @@ function ProductModal({ isOpen, onClose, product, categories, onSave, onDelete }
         storeId: currentUser.uid,
         imageUrl: uploadedImageUrl,
       };
-
-      if (product) {
-        await updateDoc(doc(db, "products", product.id), productData);
-      } else {
-        await addDoc(collection(db, "products"), { ...productData, createdAt: new Date() });
+      try {
+        if (product) {
+          console.log('[Firestore] 기존 메뉴 수정:', product.id, productData);
+          await updateDoc(doc(db, "products", product.id), productData);
+        } else {
+          console.log('[Firestore] 새 메뉴 추가:', productData);
+          await addDoc(collection(db, "products"), { ...productData, createdAt: new Date() });
+        }
+        console.log('[Firestore] 저장 성공');
+        onSave();
+        onClose();
+      } catch (firestoreErr) {
+        console.error('[Firestore] 저장 실패:', firestoreErr);
+        alert('메뉴 저장에 실패했습니다.');
       }
-      onSave();
-      onClose();
     } catch (error) {
-      console.error('메뉴 저장 실패:', error);
+      console.error('[handleSave] 예외 발생:', error);
       alert('메뉴 저장에 실패했습니다.');
     }
   };

@@ -5,18 +5,6 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // .env 파일 로딩을 완전히 무시하고, 여기서 직접 환경 변수를 정의하여 주입합니다.
-  define: {
-    'process.env': {
-      VITE_FIREBASE_API_KEY: "AIzaSyBfN3RRbzcKHRP7OoMqTDp4zSBg3DRItyE",
-      VITE_FIREBASE_AUTH_DOMAIN: "store-owner-web.firebaseapp.com",
-      VITE_FIREBASE_PROJECT_ID: "store-owner-web",
-      VITE_FIREBASE_STORAGE_BUCKET: "store-owner-web.firebasestorage.app",
-      VITE_FIREBASE_MESSAGING_SENDER_ID: "781532608545",
-      VITE_FIREBASE_APP_ID: "1:781532608545:web:2af70532da2cf30ae5cb60",
-      VITE_FIREBASE_MEASUREMENT_ID: "G-ZKHZ2MPMKW"
-    }
-  },
   server: {
     historyApiFallback: true,
   },

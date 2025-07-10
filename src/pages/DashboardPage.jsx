@@ -6,7 +6,7 @@ import MenuTab from './dashboard/MenuTab';
 import OrderManagePage from './dashboard/OrderManagePage';
 import { db, auth } from '../firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, updateDoc, writeBatch, getDocs, deleteDoc, orderBy } from "firebase/firestore";
-import { signOut, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
+import { signOut, deleteUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('store');
@@ -15,6 +15,11 @@ export default function DashboardPage() {
   const [restaurantName, setRestaurantName] = useState('내 매장');
   const [currentUser, setCurrentUser] = useState(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [showPwChange, setShowPwChange] = useState(false);
+  const [pwCurrent, setPwCurrent] = useState("");
+  const [pwNew, setPwNew] = useState("");
+  const [pwNew2, setPwNew2] = useState("");
+  const [pwMsg, setPwMsg] = useState("");
 
   // --- 모든 탭의 데이터를 관리하는 상태 ---
   const [userInfo, setUserInfo] = useState(null);
@@ -231,6 +236,28 @@ export default function DashboardPage() {
     }
   };
 
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setPwMsg("");
+    if (!pwCurrent || !pwNew || !pwNew2) {
+      setPwMsg("모든 항목을 입력하세요."); return;
+    }
+    if (pwNew !== pwNew2) {
+      setPwMsg("새 비밀번호가 일치하지 않습니다."); return;
+    }
+    try {
+      const user = auth.currentUser;
+      const cred = EmailAuthProvider.credential(user.email, pwCurrent);
+      await reauthenticateWithCredential(user, cred);
+      await updatePassword(user, pwNew);
+      setPwMsg("비밀번호가 성공적으로 변경되었습니다.");
+      setShowPwChange(false);
+      setPwCurrent(""); setPwNew(""); setPwNew2("");
+    } catch (err) {
+      setPwMsg("변경 실패: " + (err.message || err.code));
+    }
+  };
+
   const renderContent = () => {
     if (isLoading) {
       return <div>데이터를 불러오는 중...</div>;
@@ -295,6 +322,22 @@ export default function DashboardPage() {
 
         <div style={{ marginTop: 30 }}>
           {renderContent()}
+        </div>
+        <div style={{ marginTop: 40, textAlign: 'center' }}>
+          <button onClick={() => setShowPwChange(v => !v)} style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 6, padding: '10px 24px', fontWeight: 500, cursor: 'pointer' }}>
+            비밀번호 변경
+          </button>
+          {showPwChange && (
+            <form onSubmit={handleChangePassword} style={{ margin: '20px auto', maxWidth: 400, background: '#fafafa', border: '1px solid #eee', borderRadius: 8, padding: 24 }}>
+              <h4 style={{ marginTop: 0 }}>비밀번호 변경</h4>
+              <input type="password" placeholder="현재 비밀번호" value={pwCurrent} onChange={e => setPwCurrent(e.target.value)} style={{ width: '100%', marginBottom: 8, padding: 8 }} />
+              <input type="password" placeholder="새 비밀번호" value={pwNew} onChange={e => setPwNew(e.target.value)} style={{ width: '100%', marginBottom: 8, padding: 8 }} />
+              <input type="password" placeholder="새 비밀번호 확인" value={pwNew2} onChange={e => setPwNew2(e.target.value)} style={{ width: '100%', marginBottom: 8, padding: 8 }} />
+              <button type="submit" style={{ width: '100%', background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, padding: 10, fontWeight: 500 }}>변경하기</button>
+              {pwMsg && <div style={{ color: pwMsg.startsWith('비밀번호가 성공') ? 'green' : 'red', marginTop: 8 }}>{pwMsg}</div>}
+              <button type="button" style={{ marginTop: 8, background: 'none', border: 'none', color: '#888', cursor: 'pointer' }} onClick={() => setShowPwChange(false)}>닫기</button>
+            </form>
+          )}
         </div>
       </div>
       
