@@ -2,13 +2,14 @@ import React, { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
+import { Toaster } from "sonner";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
 import NotFound from "./pages/NotFound";
 import OrderPage from "./pages/OrderPage";
-// import HomePage from "@/pages/HomePage"; // 메인 페이지
-// import DashboardPage from './pages/DashboardPage'; // ← 추후 관리자 페이지 만들 경우 대비
+import ReservationPage from "./pages/ReservationPage";
+import './index.css';
 
 // 로그인 상태를 체크하는 훅
 function useAuth() {
@@ -41,6 +42,12 @@ function ProtectedRoute({ children }) {
 function App() {
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <Toaster 
+        position="top-right"
+        richColors
+        closeButton
+        duration={4000}
+      />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -60,8 +67,9 @@ function App() {
             </ProtectedRoute>
           } 
         />
-        <Route path="/order/:storeSlug/:tableId" element={<OrderPage />} />
-        <Route path="/order/:storeSlug" element={<OrderPage />} />
+        <Route path="/:storeSlug/:tableId" element={<OrderPage />} />
+        <Route path="/:storeSlug" element={<OrderPage />} />
+        <Route path="/:storeSlug/reservation" element={<ReservationPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Router>

@@ -5,6 +5,7 @@ import { createUserWithEmailAndPassword, RecaptchaVerifier, signInWithPhoneNumbe
 import { doc, setDoc } from "firebase/firestore";
 import styles from '../styles/AuthForm.module.css';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import BusinessVerificationModal from '../components/BusinessVerificationModal';
 
 if (import.meta.env.DEV) {
   console.log("RecaptchaVerifier import 결과:", RecaptchaVerifier);
@@ -26,7 +27,15 @@ export default function RegisterPage() {
   const [phoneAuthSuccess, setPhoneAuthSuccess] = useState("");
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [showBusinessVerification, setShowBusinessVerification] = useState(false);
+  const [businessVerified, setBusinessVerified] = useState(false);
+  const [businessVerificationData, setBusinessVerificationData] = useState(null);
   const navigate = useNavigate();
+
+  // 페이지 제목 설정
+  useEffect(() => {
+    document.title = '오더랜드 - 회원가입';
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !auth) return;
@@ -161,8 +170,7 @@ export default function RegisterPage() {
     setStep(3);
   };
 
-  const handleRegister = async (e) => {
-    e.preventDefault();
+  const handleNextStep3 = () => {
     setError("");
     if (!password || !confirmPassword) {
       setError('비밀번호를 입력해주세요.');
@@ -172,10 +180,19 @@ export default function RegisterPage() {
       setError('비밀번호가 일치하지 않습니다.');
       return;
     }
+    setStep(4);
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setError("");
+    
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      await setDoc(doc(db, "users", user.uid), {
+      
+      // 사용자 데이터 구성
+      const userData = {
         uid: user.uid,
         email: user.email,
         name: name,
@@ -183,8 +200,20 @@ export default function RegisterPage() {
         phone: toInternationalPhone(phone),
         tableCount: 1,
         createdAt: new Date()
-      });
-      setStep(4);
+      };
+
+      // 사업자 인증 정보가 있으면 추가
+      if (businessVerified && businessVerificationData) {
+        userData.businessVerified = true;
+        userData.businessNumber = businessVerificationData.businessNumber;
+        userData.businessName = businessVerificationData.businessName;
+        userData.representativeName = businessVerificationData.representativeName;
+        userData.openingDate = businessVerificationData.openingDate;
+        userData.verifiedAt = businessVerificationData.verifiedAt;
+      }
+
+      await setDoc(doc(db, "users", user.uid), userData);
+      setStep(5);
     } catch (err) {
       if (err.code === 'auth/email-already-in-use') {
         setError('이미 사용 중인 이메일입니다.');
@@ -196,10 +225,18 @@ export default function RegisterPage() {
     }
   };
 
+  // 사업자 인증 성공 핸들러
+  const handleBusinessVerificationSuccess = (verificationData) => {
+    setBusinessVerified(true);
+    setBusinessVerificationData(verificationData);
+    setShowBusinessVerification(false);
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.formWrapper}>
-        <h1 className={styles.title}>회원가입</h1>
+        <h1 className={styles.title}>오더랜드</h1>
+        <h2 style={{ textAlign: 'center', marginBottom: 20, color: '#666', fontSize: '18px' }}>회원가입</h2>
         {step === 1 && (
           <div style={{ marginBottom: 24, padding: 16, border: '1px solid #eee', borderRadius: 8 }}>
             <h3>1단계: 전화번호 인증 및 이름 입력</h3>
@@ -328,73 +365,131 @@ export default function RegisterPage() {
                 {showPassword ? <FaEyeSlash /> : <FaEye />}
               </button>
             </div>
-            <button type="submit" className={styles.button} style={{ width: '100%' }}>
-              회원가입
+            <button type="button" className={styles.button} onClick={handleNextStep3} style={{ width: '100%' }}>
+              다음
             </button>
             {error && <p className={styles.errorText}>{error}</p>}
           </form>
         )}
         {step === 4 && (
+          <div style={{ marginBottom: 24, padding: 16, border: '1px solid #eee', borderRadius: 8 }}>
+            <h3>4단계: 사업자 인증 (선택사항)</h3>
+            <p style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
+              사업자 인증을 완료하면 더 안전하고 신뢰할 수 있는 서비스를 이용할 수 있습니다.
+            </p>
+            
+            {businessVerified ? (
+              <div style={{ 
+                padding: 12, 
+                backgroundColor: '#f0fdf4', 
+                border: '1px solid #bbf7d0', 
+                borderRadius: 8, 
+                marginBottom: 16 
+              }}>
+                <div style={{ color: '#16a34a', fontWeight: 600, marginBottom: 4 }}>
+                  ✓ 사업자 인증 완료
+                </div>
+                <div style={{ fontSize: 14, color: '#166534' }}>
+                  {businessVerificationData?.businessName} ({businessVerificationData?.businessNumber})
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowBusinessVerification(true)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 16,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  marginBottom: 16
+                }}
+              >
+                사업자 인증하기
+              </button>
+            )}
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                type="button"
+                onClick={() => setStep(5)}
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  backgroundColor: '#6b7280',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 16,
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                건너뛰기
+              </button>
+              <button
+                type="button"
+                onClick={handleRegister}
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  backgroundColor: '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 16,
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                회원가입 완료
+              </button>
+            </div>
+            {error && <p className={styles.errorText}>{error}</p>}
+          </div>
+        )}
+        {step === 5 && (
           <div style={{ marginBottom: 24, padding: 16, border: '1px solid #eee', borderRadius: 8, textAlign: 'center' }}>
             <h3>회원가입이 완료되었습니다!</h3>
-            {/*
-            <p>지문/Face ID 등 Passkey(패스키)로 로그인하시겠습니까?</p>
-            <button
-              type="button"
-              className={styles.button}
-              style={{ width: '100%', marginBottom: 16 }}
-              onClick={async () => {
-                try {
-                  console.log('=== Passkey 등록 시작 ===');
-                  console.log('1. Firebase auth import 시도...');
-                  const { linkWithPasskey } = await import('firebase/auth');
-                  console.log('2. linkWithPasskey import 성공:', !!linkWithPasskey);
-                  
-                  console.log('3. 현재 사용자 확인:', auth.currentUser?.uid);
-                  if (!auth.currentUser) {
-                    throw new Error('사용자가 로그인되지 않았습니다.');
-                  }
-                  
-                  console.log('4. linkWithPasskey 호출 시도...');
-                  const result = await linkWithPasskey(auth.currentUser);
-                  console.log('5. linkWithPasskey 성공:', result);
-                  
-                  alert('Passkey(지문/Face ID) 등록이 완료되었습니다!');
-                  window.location.href = '/';
-                } catch (e) {
-                  console.error('=== Passkey 등록 실패 ===');
-                  console.error('에러 코드:', e.code);
-                  console.error('에러 메시지:', e.message);
-                  console.error('전체 에러 객체:', e);
-                  
-                  let errorMessage = 'Passkey 등록에 실패했습니다.';
-                  if (e.code === 'auth/not-supported') {
-                    errorMessage = '이 브라우저/기기는 Passkey를 지원하지 않습니다.';
-                  } else if (e.code === 'auth/credential-already-in-use') {
-                    errorMessage = '이미 Passkey가 등록되어 있습니다.';
-                  } else if (e.code === 'auth/operation-not-allowed') {
-                    errorMessage = 'Passkey 기능이 활성화되지 않았습니다.';
-                  } else if (e.message?.includes('not supported')) {
-                    errorMessage = '이 기기에서 생체인식을 지원하지 않습니다.';
-                  }
-                  
-                  alert(errorMessage + '\n\n브라우저/기기 지원 여부를 확인하세요.');
-                }
-              }}
-            >
-              Passkey(지문/Face ID)로 등록하기
-            </button>
+            {businessVerified && (
+              <div style={{ 
+                padding: 12, 
+                backgroundColor: '#f0fdf4', 
+                border: '1px solid #bbf7d0', 
+                borderRadius: 8, 
+                marginBottom: 16 
+              }}>
+                <div style={{ color: '#16a34a', fontWeight: 600 }}>
+                  ✓ 사업자 인증 완료
+                </div>
+                <div style={{ fontSize: 14, color: '#166534' }}>
+                  인증된 사업자로 등록되었습니다.
+                </div>
+              </div>
+            )}
             <button
               type="button"
               className={styles.button}
               style={{ width: '100%' }}
               onClick={() => window.location.href = '/'}
             >
-              나중에 할래요
+              대시보드로 이동
             </button>
-            */}
           </div>
         )}
+
+        {/* 사업자 인증 모달 */}
+        <BusinessVerificationModal
+          isOpen={showBusinessVerification}
+          onClose={() => setShowBusinessVerification(false)}
+          onSuccess={handleBusinessVerificationSuccess}
+        />
+
         <p className={styles.linkText}>
           이미 계정이 있으신가요? <Link to="/login">로그인</Link>
         </p>

@@ -12,29 +12,26 @@ import {
   orderBy
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { 
+  Plus, 
+  Utensils, 
+  AlertTriangle, 
+  Crown,
+  Edit,
+  Trash2
+} from "lucide-react";
 
 // --- 스타일 컴포넌트 ---
 const styles = {
-  container: { display: 'flex', gap: '30px', padding: '20px', fontFamily: 'sans-serif', background: '#f8fafc', height: 'calc(100vh - 200px)' },
-  sidebar: { width: '250px', background: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' },
-  mainContent: { flex: 1, background: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' },
-  categoryList: { listStyle: 'none', padding: 0, margin: 0, flex: 1 },
-  categoryItem: (isSelected) => ({
-    padding: '12px 15px',
-    marginBottom: '8px',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontWeight: '600',
-    backgroundColor: isSelected ? '#3b82f6' : 'transparent',
-    color: isSelected ? '#fff' : '#334155',
-    transition: 'all 0.2s',
-  }),
+  container: { padding: '20px', fontFamily: 'sans-serif', background: '#f8fafc' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
   button: {
     padding: '10px 20px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600',
   },
-  table: { width: '100%', borderCollapse: 'collapse', marginTop: '20px' },
-  th: { borderBottom: '2px solid #e2e8f0', padding: '12px', textAlign: 'left', color: '#64748b' },
-  td: { borderBottom: '1px solid #f1f5f9', padding: '12px' },
   modalBackdrop: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
   modalContent: { background: 'white', padding: '30px', borderRadius: '8px', width: '400px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' },
   input: { width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginBottom: '15px' },
@@ -203,10 +200,15 @@ function CategoryModal({ isOpen, onClose, category, onSave }) {
     return (
         <div style={styles.modalBackdrop}>
             <div style={styles.modalContent}>
-                <h3 style={{marginTop: 0}}>{category ? '카테고리 수정' : '새 카테고리 추가'}</h3>
-                <label>카테고리 이름</label>
-                <input type="text" value={name} onChange={(e) => setName(e.target.value)} style={styles.input} />
-                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                <h3>{category ? '카테고리 수정' : '새 카테고리 추가'}</h3>
+                <input 
+                    type="text" 
+                    placeholder="카테고리 이름" 
+                    value={name} 
+                    onChange={e => setName(e.target.value)} 
+                    style={styles.input} 
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
                     <button onClick={onClose}>취소</button>
                     <button onClick={handleSave} style={styles.button}>저장</button>
                 </div>
@@ -216,166 +218,257 @@ function CategoryModal({ isOpen, onClose, category, onSave }) {
 }
 
 export default function MenuTab({ categories, products, onMenuUpdate }) {
-  const [activeCategory, setActiveCategory] = useState(null);
-  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('전체 메뉴');
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-  const [editingCategory, setEditingCategory] = useState(null);
-  const [editingProduct, setEditingProduct] = useState(null);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedCategoryForEdit, setSelectedCategoryForEdit] = useState(null);
 
-  useEffect(() => {
-    if (categories.length > 0 && !activeCategory) {
-      setActiveCategory(categories[0]);
-    } else if (categories.length > 0 && activeCategory) {
-      const updatedActiveCategory = categories.find(c => c.id === activeCategory.id);
-      setActiveCategory(updatedActiveCategory || categories[0]);
-    } else if (categories.length === 0) {
-      setActiveCategory(null);
+  // 카테고리별 메뉴 필터링
+  const filteredProducts = useMemo(() => {
+    if (selectedCategory === '전체 메뉴') {
+      return products;
     }
-  }, [categories]);
+    return products.filter(product => product.category === selectedCategory);
+  }, [products, selectedCategory]);
 
   const handleDeleteCategory = async (categoryId, categoryName) => {
-    if (!window.confirm(`'${categoryName}' 카테고리를 삭제하면 속한 메뉴도 모두 삭제됩니다. 계속하시겠습니까?`)) return;
+    if (!window.confirm(`"${categoryName}" 카테고리를 삭제하시겠습니까? 이 카테고리의 모든 메뉴도 함께 삭제됩니다.`)) {
+      return;
+    }
+
     try {
-      const productsToDelete = products.filter(p => p.category === categoryName);
+      // 해당 카테고리의 모든 메뉴 삭제
+      const productsToDelete = products.filter(product => product.category === categoryName);
       for (const product of productsToDelete) {
-        if (product.imageUrl) {
-          try {
-            const imageRef = ref(storage, product.imageUrl);
-            await deleteObject(imageRef);
-          } catch (storageError) {
-             console.error("이미지 삭제 실패:", storageError);
-          }
-        }
         await deleteDoc(doc(db, "products", product.id));
       }
+
+      // 카테고리 삭제
       await deleteDoc(doc(db, "categories", categoryId));
-      onMenuUpdate();
+      
+      alert('카테고리가 성공적으로 삭제되었습니다.');
+      if (onMenuUpdate) onMenuUpdate();
     } catch (error) {
-      console.error("카테고리 삭제 실패:", error);
-      alert("카테고리 삭제에 실패했습니다.");
+      console.error('카테고리 삭제 실패:', error);
+      alert('카테고리 삭제에 실패했습니다.');
     }
   };
 
   const handleDeleteProduct = async (product) => {
-     try {
-       if (product.imageUrl) {
-         const imageRef = ref(storage, product.imageUrl);
-         await deleteObject(imageRef);
-       }
+    if (!window.confirm(`"${product.name}" 메뉴를 삭제하시겠습니까?`)) {
+      return;
+    }
+
+    try {
       await deleteDoc(doc(db, "products", product.id));
-      onMenuUpdate();
+      alert('메뉴가 성공적으로 삭제되었습니다.');
+      if (onMenuUpdate) onMenuUpdate();
     } catch (error) {
-       console.error("메뉴 삭제 실패:", error);
-       alert("메뉴 삭제에 실패했습니다.");
+      console.error('메뉴 삭제 실패:', error);
+      alert('메뉴 삭제에 실패했습니다.');
     }
   };
 
-  const filteredMenus = useMemo(() => {
-    if (!activeCategory) return products;
-    return products.filter(menu => menu.category === activeCategory.name);
-  }, [products, activeCategory]);
-
   const openCategoryModal = (category = null) => {
-    setEditingCategory(category);
+    setSelectedCategoryForEdit(category);
     setIsCategoryModalOpen(true);
   };
-  
+
   const openProductModal = (product = null) => {
-    setEditingProduct(product);
+    setSelectedProduct(product);
     setIsProductModalOpen(true);
   };
 
-  return (
-    <div style={styles.container}>
-      {/* Categories Sidebar */}
-      <aside style={styles.sidebar}>
-        <h3>카테고리</h3>
-        <ul style={styles.categoryList}>
-          <li style={styles.categoryItem(activeCategory === null)} onClick={() => setActiveCategory(null)}>전체 메뉴</li>
-          {categories.map(cat => (
-            <li 
-              key={cat.id} 
-              style={{...styles.categoryItem(activeCategory?.id === cat.id), display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}
-              onClick={() => setActiveCategory(cat)}
-            >
-              <span>{cat.name}</span>
-              <button 
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: activeCategory?.id === cat.id ? '#fca5a5' : '#ef4444',
-                  cursor: 'pointer',
-                  padding: '0 0 0 10px',
-                  fontSize: '14px',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteCategory(cat.id, cat.name);
-                }}>삭제</button>
-            </li>
-          ))}
-        </ul>
-        <button onClick={() => openCategoryModal()} style={styles.button}>+ 새 카테고리</button>
-      </aside>
+  // 모든 카테고리 목록 (전체 메뉴 포함)
+  const allCategories = ['전체 메뉴', ...categories.map(cat => cat.name)];
 
-      {/* Menus Main Content */}
-      <main style={styles.mainContent}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3>메뉴</h3>
-          <button onClick={() => openProductModal()} style={styles.button}>+ 새 메뉴 추가</button>
+  // 빈 상태 렌더링
+  if (categories.length === 0 && products.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8">
+        <div className="w-32 h-32 bg-muted rounded-full flex items-center justify-center mb-8">
+          <Utensils className="w-16 h-16 text-muted-foreground" />
         </div>
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={styles.th}>사진</th><th style={styles.th}>이름</th><th style={styles.th}>가격</th><th style={styles.th}>작업</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredMenus.map((menu) => (
-              <tr key={menu.id}>
-                <td style={styles.td}>
-                  <div style={{
-                    width: '60px',
-                    height: '60px',
-                    background: '#f1f5f9',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderRadius: '4px',
-                    overflow: 'hidden'
-                  }}>
-                    {menu.imageUrl ? (
-                      <img src={menu.imageUrl} alt={menu.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <span style={{ color: '#9ca3af', fontSize: '12px' }}>No img</span>
-                    )}
-                  </div>
-                </td>
-                <td>{menu.name}</td>
-                <td>{Number(menu.price).toLocaleString()}원</td>
-                <td>
-                  <button style={{marginRight: '8px', cursor: 'pointer'}} onClick={() => openProductModal(menu)}>수정</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </main>
+        <h2 className="text-3xl font-bold mb-4">메뉴를 추가해주세요</h2>
+        <p className="text-muted-foreground mb-8 max-w-md">
+          고객들이 주문할 수 있는 메뉴와 카테고리를 추가하여 매장을 준비하세요.
+        </p>
+        <div className="flex gap-6">
+          <Button size="lg" className="h-16 px-8 text-lg" onClick={() => openCategoryModal()}>
+            <Plus className="w-6 h-6 mr-3" />
+            카테고리 추가
+          </Button>
+          <Button size="lg" className="h-16 px-8 text-lg" onClick={() => openProductModal()}>
+            <Plus className="w-6 h-6 mr-3" />
+            메뉴 추가
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
-      {/* Modals */}
-      <CategoryModal 
-        isOpen={isCategoryModalOpen}
-        onClose={() => setIsCategoryModalOpen(false)}
-        category={editingCategory}
-        onSave={onMenuUpdate}
-      />
-      <ProductModal 
+  return (
+    <div className="p-6 space-y-8">
+      <div>
+        <h2 className="text-3xl font-bold mb-2">메뉴 관리</h2>
+        <p className="text-muted-foreground">
+        메뉴와 카테고리를 관리하세요
+      </p>
+      </div>
+
+      {/* 카테고리 탭 */}
+      <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
+        {allCategories.map(cat => (
+          <Button
+            key={cat}
+            variant={selectedCategory === cat ? "default" : "outline"}
+            onClick={() => setSelectedCategory(cat)}
+            className="whitespace-nowrap"
+          >
+            {cat}
+          </Button>
+        ))}
+      </div>
+
+      {/* 액션 버튼 */}
+      <div className="flex gap-4">
+        <Button variant="outline" onClick={() => openCategoryModal()}>
+          <Plus className="w-4 h-4 mr-2" />
+          카테고리 추가
+        </Button>
+        <Button onClick={() => openProductModal()}>
+          <Plus className="w-4 h-4 mr-2" />
+          메뉴 추가
+        </Button>
+      </div>
+
+      {/* 메뉴 카드 그리드 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {filteredProducts.map(product => (
+          <Card key={product.id} className="hover:shadow-lg transition-all duration-200 relative overflow-hidden group">
+            {/* 상태 배지 */}
+            <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
+              {product.outOfStock && (
+                <Badge variant="destructive" className="flex items-center gap-1 text-xs">
+                  <AlertTriangle className="w-3 h-3" />
+                  품절
+                </Badge>
+              )}
+              {product.ingredientsDepleted && (
+                <Badge variant="warning" className="flex items-center gap-1 text-xs">
+                  📦
+                  재료 소진
+                </Badge>
+              )}
+            </div>
+
+            {/* 추천 배지 */}
+            {product.recommended && (
+              <div className="absolute top-2 right-2 z-10">
+                <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white">
+                  <Crown className="w-3 h-3" />
+                {product.recommended === 'boss' ? '사장님 추천' : 
+                 product.recommended === 'best' ? '베스트 메뉴' : '신메뉴'}
+                </Badge>
+              </div>
+            )}
+
+            <CardHeader className="pb-4 pt-12">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                {product.imageUrl ? (
+                    <img 
+                      src={product.imageUrl} 
+                      alt={product.name} 
+                      className="w-full h-full object-cover rounded-lg" 
+                    />
+                  ) : (
+                    <Utensils className="w-6 h-6 text-primary" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <CardTitle className="text-lg">{product.name}</CardTitle>
+                  <Badge variant="secondary">{product.category}</Badge>
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              <div className="text-2xl font-bold text-primary">
+                ₩{product.price.toLocaleString()}
+              </div>
+              
+              {product.description && (
+                <p className="text-sm text-muted-foreground">
+                  {product.description}
+                </p>
+              )}
+              
+              {/* 토글 컨트롤 */}
+              <div className="border-t pt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">품절</span>
+                  <Switch 
+                    checked={product.outOfStock || false}
+                    onCheckedChange={(checked) => {
+                      // 상태 변경 로직
+                      console.log('품절 상태 변경:', checked);
+                    }}
+                  />
+              </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">재료 소진</span>
+                  <Switch 
+                    checked={product.ingredientsDepleted || false}
+                    onCheckedChange={(checked) => {
+                      console.log('재료 소진 상태 변경:', checked);
+                    }}
+                  />
+              </div>
+            </div>
+
+            {/* 액션 버튼 */}
+              <div className="flex gap-2 pt-4 border-t">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex-1"
+                  onClick={() => openProductModal(product)}
+                >
+                  <Edit className="w-3 h-3 mr-1" />
+                  수정
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex-1 text-destructive hover:text-destructive"
+                  onClick={() => handleDeleteProduct(product)}
+                >
+                  <Trash2 className="w-3 h-3 mr-1" />
+                  삭제
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* 모달들 */}
+      <ProductModal
         isOpen={isProductModalOpen}
         onClose={() => setIsProductModalOpen(false)}
-        product={editingProduct}
+        product={selectedProduct}
         categories={categories}
         onSave={onMenuUpdate}
         onDelete={handleDeleteProduct}
+      />
+
+      <CategoryModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        category={selectedCategoryForEdit}
+        onSave={onMenuUpdate}
       />
     </div>
   );

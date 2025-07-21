@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import OrderSummaryModal from '../components/OrderSummaryModal';
 import styles from './OrderPage.module.css';
 import { db } from '../firebase'; // Firebase db 객체 가져오기
-import { collection, query, where, getDocs, addDoc, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, onSnapshot, orderBy, doc, setDoc, getDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 
 function getTableKey(storeSlug, tableId) {
   return `${storeSlug}-Table-${String(tableId).replace(/^table-/, '')}`;
@@ -100,6 +100,11 @@ export default function OrderPage() {
   const storeName = storeSlug.replace(/-/g, ' '); // URL 슬러그를 원래 가게 이름으로 변환
   const tableId = Number(params.tableId.replace('table-', ''));
   
+  // 페이지 제목 설정
+  useEffect(() => {
+    document.title = `오더랜드 - ${storeName}`;
+  }, [storeName]);
+
   const [storeId, setStoreId] = useState(null); // 가게 주인의 user.uid
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -111,6 +116,16 @@ export default function OrderPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [menuQuantities, setMenuQuantities] = useState({});
+  const [sessionError, setSessionError] = useState(null);
+  const [sessionActive, setSessionActive] = useState(false);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const sessionId = `${storeSlug}-table-${tableId}`;
+  const sessionRef = doc(db, 'table_sessions', sessionId);
+  const currentUserId = window.localStorage.getItem('guestId') || (() => {
+    const id = Math.random().toString(36).slice(2) + Date.now();
+    window.localStorage.setItem('guestId', id);
+    return id;
+  })();
 
   // storeName을 기반으로 storeId(user.uid)를 찾는 로직
   const fetchStoreId = useCallback(async () => {
@@ -214,6 +229,51 @@ export default function OrderPage() {
     return () => unsubscribe();
   }, [storeId, tableId]);
 
+  // 세션 체크 및 생성
+  useEffect(() => {
+    if (!storeSlug || !tableId) return;
+    let unsub = null;
+    (async () => {
+      setSessionLoading(true);
+      const snap = await getDoc(sessionRef);
+      const now = new Date();
+      if (!snap.exists() || (snap.data().expiresAt && snap.data().expiresAt.toDate() < now)) {
+        // 세션 없음 or 만료 → 새 세션 생성
+        await setDoc(sessionRef, {
+          tableId: sessionId,
+          userId: currentUserId,
+          startedAt: Timestamp.fromDate(now),
+          expiresAt: Timestamp.fromDate(new Date(now.getTime() + 30 * 60 * 1000)),
+          status: 'active',
+        });
+        setSessionActive(true);
+        setSessionError(null);
+      } else {
+        const session = snap.data();
+        if (session.userId !== currentUserId) {
+          setSessionActive(false);
+          setSessionError('다른 사용자가 이 테이블을 이용 중입니다.');
+        } else {
+          setSessionActive(true);
+          setSessionError(null);
+        }
+      }
+      setSessionLoading(false);
+      // 실시간 세션 만료/삭제 감지
+      unsub = onSnapshot(sessionRef, (docSnap) => {
+        const data = docSnap.data();
+        if (!docSnap.exists() || (data && data.expiresAt && data.expiresAt.toDate() < new Date())) {
+          setSessionActive(false);
+          setSessionError('세션이 만료되었거나 테이블이 리셋되었습니다. 다시 접속해주세요.');
+        }
+      });
+    })();
+    return () => { if (unsub) unsub(); };
+  }, [storeSlug, tableId]);
+
+  // 결제 완료 시 세션 삭제(예시, 실제 결제 완료 로직에 추가 필요)
+  // await deleteDoc(sessionRef);
+
   // 수량 변경 핸들러
   const handleQuantityChange = (menuId, delta) => {
     setMenuQuantities(prev => {
@@ -243,7 +303,7 @@ export default function OrderPage() {
     if (menuId === 'all') {
       setCart([]);
     } else {
-      setCart(prev => prev.filter(item => item.id !== menuId));
+    setCart(prev => prev.filter(item => item.id !== menuId));
     }
   };
 
@@ -285,9 +345,9 @@ export default function OrderPage() {
         createdAt: new Date()
       };
       await addDoc(collection(db, "orders"), orderData);
-      setCart([]);
-      setIsCartOpen(false);
-      alert('주문이 접수되었습니다!');
+        setCart([]);
+        setIsCartOpen(false);
+        alert('주문이 접수되었습니다!');
     } catch (err) {
       console.error("Firestore 주문 제출 실패:", err);
       alert('주문 실패: ' + err.message);
@@ -316,6 +376,10 @@ export default function OrderPage() {
 
   // 장바구니 총액 계산
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.count, 0);
+
+  if (sessionLoading) return <div>세션 확인 중...</div>;
+  if (sessionError) return <div style={{color:'red',textAlign:'center',marginTop:40}}>{sessionError}</div>;
+  if (!sessionActive) return null;
 
   if (loading && products.length === 0) {
     return <div className={styles.loadingContainer}>메뉴를 불러오는 중...</div>;
@@ -359,7 +423,7 @@ export default function OrderPage() {
       <main className={styles.menuGrid}>
         {products.map(menu => (
           <div key={menu.id} className={styles.menuItem}>
-            <img
+            <img 
               src={menu.imageUrl && menu.imageUrl.trim() ? menu.imageUrl : 'https://via.placeholder.com/300x200'}
               alt={menu.name}
               className={styles.menuImage}
@@ -395,7 +459,7 @@ export default function OrderPage() {
         tableId={tableId}
       />
       
-      <OrderHistoryModal
+       <OrderHistoryModal
         isOpen={isHistoryOpen}
         onClose={() => setIsHistoryOpen(false)}
         orderHistory={orderHistory}

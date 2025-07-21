@@ -1,12 +1,35 @@
-# React + Vite
+# Order.Land
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Order.Land는 식당 주문 관리 시스템입니다. 웹 기반의 관리자 페이지와 모바일 앱을 통해 효율적인 주문 관리를 제공합니다.
 
-Currently, two official plugins are available:
+## 주요 기능
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- 실시간 주문 현황 모니터링
+- QR 코드를 통한 테이블별 주문 시스템
+- 메뉴 관리 및 카테고리 설정
+- 매출 통계 및 분석
+- 예약 관리 시스템
 
-## Expanding the ESLint configuration
+## 기술 스택
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- **Frontend**: React + Vite
+- **Mobile**: React Native + Expo
+- **Backend**: Firebase (Firestore, Authentication)
+- **Deployment**: Vercel
+
+## 개발 환경 설정
+
+```bash
+# 의존성 설치
+npm install
+
+# 개발 서버 실행
+npm run dev
+
+# 빌드
+npm run build
+```
+
+## 라이선스
+
+MIT License

@@ -3,16 +3,55 @@ import StoreInfoTab from './dashboard/StoreInfoTab';
 import OrderTab from './dashboard/OrderTab';
 import SalesTab from './dashboard/SalesTab';
 import MenuTab from './dashboard/MenuTab';
+import ReservationsTab from './dashboard/ReservationsTab';
 import OrderManagePage from './dashboard/OrderManagePage';
+import BusinessVerificationModal from '../components/BusinessVerificationModal';
+import { AdminLayout } from '../components/layout/AdminLayout';
+import OrdersSection from '../components/dashboard/OrdersSection';
+import { ReservationsSection } from '../components/dashboard/ReservationsSection';
+import { StatisticsCards } from '../components/dashboard/StatisticsCards';
+import { PopularMenuSection } from '../components/dashboard/PopularMenuSection';
+import AdminReservationPage from '../components/admin/AdminReservationPage';
 import { db, auth } from '../firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, updateDoc, writeBatch, getDocs, deleteDoc, orderBy } from "firebase/firestore";
 import { signOut, deleteUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
+import { 
+  Home, 
+  ShoppingCart, 
+  Menu as MenuIcon, 
+  TrendingUp, 
+  Calendar, 
+  Settings,
+  Search,
+  Bell,
+  User as UserIcon,
+  LogOut,
+  Trash2,
+  Key
+} from 'lucide-react';
 
 export default function DashboardPage() {
-  const [activeTab, setActiveTab] = useState('store');
+  const [activeTab, setActiveTab] = useState(() => {
+    const saved = localStorage.getItem('lastTab');
+    return saved || 'admin';
+  });
+
+  // 페이지 제목 설정
+  useEffect(() => {
+    document.title = '오더랜드 - 관리자';
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('lastTab', activeTab);
+  }, [activeTab]);
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    localStorage.setItem('lastTab', tab);
+  };
   const [orders, setOrders] = useState([]);
   const [callRequests, setCallRequests] = useState([]);
-  const [restaurantName, setRestaurantName] = useState('내 매장');
+  const [restaurantName, setRestaurantName] = useState('맛있는 우리집 식당');
   const [currentUser, setCurrentUser] = useState(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [showPwChange, setShowPwChange] = useState(false);
@@ -20,13 +59,13 @@ export default function DashboardPage() {
   const [pwNew, setPwNew] = useState("");
   const [pwNew2, setPwNew2] = useState("");
   const [pwMsg, setPwMsg] = useState("");
+  const [showBusinessVerification, setShowBusinessVerification] = useState(false);
 
   // --- 모든 탭의 데이터를 관리하는 상태 ---
   const [userInfo, setUserInfo] = useState(null);
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-
 
   // --- 데이터 로딩 함수들 ---
   const fetchAllData = useCallback(async (user) => {
@@ -40,7 +79,7 @@ export default function DashboardPage() {
       if (userDocSnap.exists()) {
         const userData = userDocSnap.data();
         setUserInfo(userData);
-        setRestaurantName(userData.store_name || '내 매장');
+        setRestaurantName(userData.store_name || '맛있는 우리집 식당');
       }
 
       // 2. 카테고리
@@ -104,7 +143,7 @@ export default function DashboardPage() {
         if (userDocSnap.exists()) {
           const userData = userDocSnap.data();
           setUserInfo(userData);
-          setRestaurantName(userData.store_name || '내 매장');
+          setRestaurantName(userData.store_name || '맛있는 우리집 식당');
         }
       });
     }
@@ -122,7 +161,6 @@ export default function DashboardPage() {
     }
   }, [currentUser]);
 
-
   // --- 데이터 및 계정 삭제 로직 (보안 강화) ---
   const handleResetData = async (password) => {
     if (!currentUser) return;
@@ -139,7 +177,7 @@ export default function DashboardPage() {
         return;
       }
 
-      const collectionsToDelete = ['products', 'categories', 'orders', 'staff_calls', 'sales_summary'];
+      const collectionsToDelete = ['products', 'categories', 'orders', 'staff_calls', 'sales_summary', 'businessVerifications'];
       const batch = writeBatch(db);
 
       for (const coll of collectionsToDelete) {
@@ -149,8 +187,19 @@ export default function DashboardPage() {
       }
       await batch.commit();
 
+      // 사업자 인증 정보도 함께 삭제
       const userDocRef = doc(db, "users", currentUser.uid);
-      await updateDoc(userDocRef, { store_name: '내 매장', tableCount: 0 });
+      await updateDoc(userDocRef, { 
+        store_name: '맛있는 우리집 식당', 
+        tableCount: 0,
+        // 사업자 인증 정보 삭제
+        businessVerified: false,
+        businessNumber: null,
+        businessName: null,
+        representativeName: null,
+        openingDate: null,
+        verifiedAt: null
+      });
       
       alert('모든 데이터가 성공적으로 초기화되었습니다.');
       setIsDeleteModalOpen(false);
@@ -168,42 +217,43 @@ export default function DashboardPage() {
   };
 
   const handleDeleteAccount = async (password) => {
-    const user = auth.currentUser;
-    if (!user) return;
+    if (!currentUser) return;
     if (!password) {
       alert("비밀번호를 입력해주세요.");
       return;
     }
 
     try {
-      const credential = EmailAuthProvider.credential(user.email, password);
-      await reauthenticateWithCredential(user, credential);
-
-      if (!window.confirm("인증 성공. 정말로 계정을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
+      const credential = EmailAuthProvider.credential(currentUser.email, password);
+      await reauthenticateWithCredential(currentUser, credential);
+      
+      if (!window.confirm("인증 성공. 정말로 계정을 완전히 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
         return;
       }
-      
-      const collectionsToDelete = ['products', 'categories', 'orders', 'staff_calls', 'sales_summary'];
-      const dataBatch = writeBatch(db);
+
+      // 모든 데이터 삭제
+      const collectionsToDelete = ['products', 'categories', 'orders', 'staff_calls', 'sales_summary', 'businessVerifications'];
+      const batch = writeBatch(db);
+
       for (const coll of collectionsToDelete) {
-        const q = query(collection(db, coll), where("storeId", "==", user.uid));
+        const q = query(collection(db, coll), where("storeId", "==", currentUser.uid));
         const snapshot = await getDocs(q);
-        snapshot.docs.forEach(doc => dataBatch.delete(doc.ref));
+        snapshot.docs.forEach(doc => batch.delete(doc.ref));
       }
-      await dataBatch.commit();
+      await batch.commit();
 
-      await deleteDoc(doc(db, "users", user.uid));
-      await deleteUser(user);
-
+      // 유저 문서 삭제
+      await deleteDoc(doc(db, "users", currentUser.uid));
+      
+      // 계정 삭제
+      await deleteUser(currentUser);
+      
       alert('계정이 성공적으로 삭제되었습니다.');
       setIsDeleteModalOpen(false);
     } catch (error) {
       console.error("계정 삭제 실패: ", error);
       if (error.code === 'auth/wrong-password') {
         alert("비밀번호가 일치하지 않습니다.");
-      } else if (error.code === 'auth/requires-recent-login') {
-        alert("계정 삭제는 보안을 위해 최근 로그인이 필요합니다. 다시 로그인한 후 시도해주세요.");
-        signOut(auth);
       } else if (error.code === 'auth/too-many-requests') {
         alert("너무 많은 로그인 시도를 하셨습니다. 잠시 후 다시 시도해주세요.");
       } else {
@@ -213,134 +263,302 @@ export default function DashboardPage() {
   };
 
   const handleLogout = async () => {
-      try {
+    try {
       await signOut(auth);
-      // 로그아웃 성공 후 로그인 페이지로 이동합니다.
-      // 이 부분이 누락되었을 수 있습니다.
-      window.location.href = '/login';
     } catch (error) {
-      console.error("로그아웃 실패:", error);
-      alert("로그아웃에 실패했습니다: " + error.message);
-      }
-    };
+      console.error("로그아웃 실패: ", error);
+    }
+  };
 
   const handleAcknowledgeCall = async (callId) => {
     try {
-      const callDocRef = doc(db, "staff_calls", callId);
-      await updateDoc(callDocRef, {
-        status: 'acknowledged'
-      });
+      await updateDoc(doc(db, "staff_calls", callId), { status: "acknowledged" });
     } catch (error) {
-      console.error("직원 호출 확인 처리 실패:", error);
-      alert('호출 확인 처리에 실패했습니다.');
+      console.error("호출 확인 실패: ", error);
     }
   };
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
-    setPwMsg("");
-    if (!pwCurrent || !pwNew || !pwNew2) {
-      setPwMsg("모든 항목을 입력하세요."); return;
-    }
+    if (!currentUser) return;
+    
     if (pwNew !== pwNew2) {
-      setPwMsg("새 비밀번호가 일치하지 않습니다."); return;
+      setPwMsg("새 비밀번호가 일치하지 않습니다.");
+      return;
     }
+    
+    if (pwNew.length < 6) {
+      setPwMsg("새 비밀번호는 최소 6자 이상이어야 합니다.");
+      return;
+    }
+
     try {
-      const user = auth.currentUser;
-      const cred = EmailAuthProvider.credential(user.email, pwCurrent);
-      await reauthenticateWithCredential(user, cred);
-      await updatePassword(user, pwNew);
+      const credential = EmailAuthProvider.credential(currentUser.email, pwCurrent);
+      await reauthenticateWithCredential(currentUser, credential);
+      await updatePassword(currentUser, pwNew);
+      
       setPwMsg("비밀번호가 성공적으로 변경되었습니다.");
+      setPwCurrent("");
+      setPwNew("");
+      setPwNew2("");
       setShowPwChange(false);
-      setPwCurrent(""); setPwNew(""); setPwNew2("");
-    } catch (err) {
-      setPwMsg("변경 실패: " + (err.message || err.code));
+    } catch (error) {
+      console.error("비밀번호 변경 실패: ", error);
+      if (error.code === 'auth/wrong-password') {
+        setPwMsg("현재 비밀번호가 일치하지 않습니다.");
+      } else if (error.code === 'auth/too-many-requests') {
+        setPwMsg("너무 많은 시도를 하셨습니다. 잠시 후 다시 시도해주세요.");
+      } else {
+        setPwMsg("비밀번호 변경에 실패했습니다. " + error.message);
+      }
     }
+  };
+
+  const handleBusinessVerificationSuccess = (verificationData) => {
+    setShowBusinessVerification(false);
+    refreshStoreInfo();
+    alert('사업자 인증이 성공적으로 완료되었습니다!');
   };
 
   const renderContent = () => {
-    if (isLoading) {
-      return <div>데이터를 불러오는 중...</div>;
-    }
-    
     switch (activeTab) {
-      case 'store':
-        return <StoreInfoTab userInfo={userInfo} onStoreUpdate={refreshStoreInfo} />;
+      case 'admin':
+        return <AdminDashboard orders={orders} userInfo={userInfo} />;
       case 'orders':
-        return <OrderManagePage orders={orders} userInfo={userInfo} onUserUpdate={refreshStoreInfo} />;
-      case 'sales':
-        return <SalesTab />;
+        return <OrderTab orders={orders} userInfo={userInfo} />;
       case 'menu':
-        return <MenuTab categories={categories} products={products} onMenuUpdate={refreshMenuData} />;
+        return <MenuTab categories={categories} products={products} refreshMenuData={refreshMenuData} userInfo={userInfo} />;
+      case 'sales':
+        return <SalesTab userInfo={userInfo} />;
+      case 'reservation':
+        return <ReservationsTab userInfo={userInfo} />;
+      case 'settings':
+        return <StoreInfoTab userInfo={userInfo} refreshStoreInfo={refreshStoreInfo} />;
       default:
-        return null;
+        return <AdminDashboard orders={orders} userInfo={userInfo} />;
     }
   };
 
-  return (
-    <div style={{ width: '100vw', height: '100vh', background: '#fff', margin: 0, padding: 8, boxSizing: 'border-box' }}>
-      <div style={{ width: '100%', minHeight: '100vh', background: '#fff', margin: 0, padding: 0, boxSizing: 'border-box' }}>
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h2 style={{ color: '#222' }}>{restaurantName}</h2>
-            <h4 style={{ margin: 0 }}>직원 호출 현황 ({callRequests.length}건)</h4>
-            <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-              {callRequests.map(call => (
-                <li key={call.id} style={{ marginBottom: 4, color: '#f59e42', display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
-                  <span>{call.tableNumber}번 테이블 직원 호출</span>
-                  <button
-                    onClick={() => handleAcknowledgeCall(call.id)}
-                    style={{
-                      background: '#fff',
-                      color: '#222',
-                      border: '1px solid #ddd',
-                      borderRadius: 6,
-                      padding: '2px 12px',
-                      fontSize: 14,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    확인
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div style={{display: 'flex', gap: '12px'}}>
-            <button onClick={() => setIsDeleteModalOpen(true)} style={{padding: '8px 16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer'}}>계정 관리</button>
-            <button onClick={handleLogout} style={{padding: '8px 16px'}}>로그아웃</button>
-          </div>
-        </header>
+  const AdminDashboard = ({ orders, userInfo }) => {
+    const todayOrders = orders.filter(order => {
+      const orderDate = new Date(order.createdAt?.toDate?.() || order.createdAt);
+      const today = new Date();
+      return orderDate.toDateString() === today.toDateString();
+    });
 
-        <div style={{ marginTop: 20, display: 'flex', gap: 12 }}>
-          <button onClick={() => setActiveTab('store')} className={activeTab === 'store' ? 'active' : ''} style={tabButtonStyle(activeTab === 'store')}>가게정보</button>
-          <button onClick={() => setActiveTab('orders')} className={activeTab === 'orders' ? 'active' : ''} style={tabButtonStyle(activeTab === 'orders')}>주문정보</button>
-          <button onClick={() => setActiveTab('sales')} className={activeTab === 'sales' ? 'active' : ''} style={tabButtonStyle(activeTab === 'sales')}>매출정보</button>
-          <button onClick={() => setActiveTab('menu')} className={activeTab === 'menu' ? 'active' : ''} style={tabButtonStyle(activeTab === 'menu')}>음식메뉴</button>
+    // 실제 주문 데이터를 바탕으로 매출 계산
+    const totalSales = todayOrders.reduce((sum, order) => {
+      // 주문 데이터 구조에 따라 items 또는 orders 필드 사용
+      let items = [];
+      if (order.items && Array.isArray(order.items)) {
+        items = order.items;
+      } else if (order.orders && Array.isArray(order.orders)) {
+        items = order.orders;
+      } else if (typeof order.orders === 'string') {
+        try {
+          items = JSON.parse(order.orders);
+        } catch (e) {
+          console.error('주문 데이터 파싱 실패:', e);
+        }
+      }
+      
+      return sum + items.reduce((s, item) => s + (item.price * item.quantity), 0);
+    }, 0);
+
+    const totalOrders = todayOrders.length;
+    const avgOrderValue = totalOrders > 0 ? Math.round(totalSales / totalOrders) : 0;
+
+    return (
+      <div className="p-6 space-y-8">
+        {/* 통계 카드 */}
+        <StatisticsCards 
+          todayOrders={todayOrders} 
+          totalSales={totalSales} 
+          avgSales={avgOrderValue} 
+        />
+
+        {/* 메인 콘텐츠 그리드 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* 왼쪽: 주문 현황 (2/3) */}
+          <div className="lg:col-span-2">
+            <OrdersSection orders={orders} userInfo={userInfo} />
+          </div>
+
+          {/* 오른쪽: 인기 메뉴 (1/3) */}
+              <div>
+            <PopularMenuSection orders={todayOrders} />
+          </div>
         </div>
 
-        <div style={{ marginTop: 30 }}>
-          {renderContent()}
-        </div>
-        <div style={{ marginTop: 40, textAlign: 'center' }}>
-          <button onClick={() => setShowPwChange(v => !v)} style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 6, padding: '10px 24px', fontWeight: 500, cursor: 'pointer' }}>
-            비밀번호 변경
-          </button>
-          {showPwChange && (
-            <form onSubmit={handleChangePassword} style={{ margin: '20px auto', maxWidth: 400, background: '#fafafa', border: '1px solid #eee', borderRadius: 8, padding: 24 }}>
-              <h4 style={{ marginTop: 0 }}>비밀번호 변경</h4>
-              <input type="password" placeholder="현재 비밀번호" value={pwCurrent} onChange={e => setPwCurrent(e.target.value)} style={{ width: '100%', marginBottom: 8, padding: 8 }} />
-              <input type="password" placeholder="새 비밀번호" value={pwNew} onChange={e => setPwNew(e.target.value)} style={{ width: '100%', marginBottom: 8, padding: 8 }} />
-              <input type="password" placeholder="새 비밀번호 확인" value={pwNew2} onChange={e => setPwNew2(e.target.value)} style={{ width: '100%', marginBottom: 8, padding: 8 }} />
-              <button type="submit" style={{ width: '100%', background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, padding: 10, fontWeight: 500 }}>변경하기</button>
-              {pwMsg && <div style={{ color: pwMsg.startsWith('비밀번호가 성공') ? 'green' : 'red', marginTop: 8 }}>{pwMsg}</div>}
-              <button type="button" style={{ marginTop: 8, background: 'none', border: 'none', color: '#888', cursor: 'pointer' }} onClick={() => setShowPwChange(false)}>닫기</button>
-            </form>
-          )}
+        {/* 예약 현황 */}
+            <ReservationsSection userInfo={userInfo} />
+      </div>
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <div className="app-container">
+        <div className="main-content">
+          <div className="content">
+            <div className="flex items-center justify-center h-64">
+              <div className="text-lg text-gray-500">로딩 중...</div>
+            </div>
+          </div>
         </div>
       </div>
-      
+    );
+  }
+
+  return (
+    <div className="app-container">
+      {/* 사이드바 */}
+      <div className="sidebar">
+        <div className="sidebar-header">
+          <div className="sidebar-logo">
+            <Home size={20} />
+          </div>
+          <div className="sidebar-brand">
+            <div className="sidebar-brand-name">오더랜드</div>
+            <div className="sidebar-brand-desc">주문 관리 서비스</div>
+          </div>
+        </div>
+
+        <div className="sidebar-menu">
+          <div className="sidebar-menu-title">메뉴</div>
+          
+          <div 
+            className={`sidebar-item ${activeTab === 'admin' ? 'active' : ''}`}
+            onClick={() => handleTabChange('admin')}
+          >
+            <div className="sidebar-item-icon">
+              <Home size={16} />
+            </div>
+            관리자페이지
+          </div>
+
+          <div 
+            className={`sidebar-item ${activeTab === 'orders' ? 'active' : ''}`}
+            onClick={() => handleTabChange('orders')}
+          >
+            <div className="sidebar-item-icon">
+              <ShoppingCart size={16} />
+            </div>
+            주문 현황
+          </div>
+
+          <div 
+            className={`sidebar-item ${activeTab === 'menu' ? 'active' : ''}`}
+            onClick={() => handleTabChange('menu')}
+          >
+            <div className="sidebar-item-icon">
+              <MenuIcon size={16} />
+            </div>
+            메뉴 변경
+          </div>
+
+          <div 
+            className={`sidebar-item ${activeTab === 'sales' ? 'active' : ''}`}
+            onClick={() => handleTabChange('sales')}
+          >
+            <div className="sidebar-item-icon">
+              <TrendingUp size={16} />
+            </div>
+            매출 정보
+          </div>
+
+          <div 
+            className={`sidebar-item ${activeTab === 'reservation' ? 'active' : ''}`}
+            onClick={() => handleTabChange('reservation')}
+          >
+            <div className="sidebar-item-icon">
+              <Calendar size={16} />
+            </div>
+            예약
+          </div>
+
+          <div 
+            className={`sidebar-item ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => handleTabChange('settings')}
+          >
+            <div className="sidebar-item-icon">
+              <Settings size={16} />
+            </div>
+            설정
+          </div>
+        </div>
+
+        {/* 계정 관리 */}
+        <div className="sidebar-menu">
+          <div className="sidebar-menu-title">계정</div>
+          
+          <div className="sidebar-item" onClick={() => setShowPwChange(true)}>
+            <div className="sidebar-item-icon">
+              <Key size={16} />
+            </div>
+            비밀번호 변경
+          </div>
+
+          <div className="sidebar-item" onClick={() => setIsDeleteModalOpen(true)}>
+            <div className="sidebar-item-icon">
+              <Trash2 size={16} />
+            </div>
+            계정 관리
+          </div>
+
+          <div className="sidebar-item" onClick={handleLogout}>
+            <div className="sidebar-item-icon">
+              <LogOut size={16} />
+            </div>
+            로그아웃
+          </div>
+        </div>
+      </div>
+
+      {/* 메인 콘텐츠 */}
+      <div className="main-content">
+        {/* 헤더 */}
+        <div className="header">
+          <div className="header-left">
+            <div className="header-title">{restaurantName}</div>
+            <div className="header-subtitle">오늘도 화이팅!</div>
+          </div>
+          
+          <div className="header-right">
+            <div className="search-bar">
+              <Search className="search-icon" size={16} />
+              <input 
+                type="text" 
+                placeholder="주문, 메뉴 검색..." 
+                className="search-input"
+              />
+            </div>
+            
+            <div className="notification-bell">
+              <Bell size={16} />
+              {callRequests.length > 0 && (
+                <div className="notification-badge">{callRequests.length}</div>
+              )}
+            </div>
+            
+            <div className="user-avatar">
+              <UserIcon size={16} />
+            </div>
+          </div>
+        </div>
+
+        {/* 콘텐츠 */}
+        {renderContent()}
+      </div>
+
+      {/* 모달들 */}
+      {showBusinessVerification && (
+        <BusinessVerificationModal
+          onClose={() => setShowBusinessVerification(false)}
+          onSuccess={handleBusinessVerificationSuccess}
+        />
+      )}
+
       {isDeleteModalOpen && (
         <DeleteModal
           onClose={() => setIsDeleteModalOpen(false)}
@@ -348,63 +566,196 @@ export default function DashboardPage() {
           onDeleteAccount={handleDeleteAccount}
         />
       )}
+
+      {showPwChange && (
+        <PasswordChangeModal
+          onClose={() => setShowPwChange(false)}
+          onSubmit={handleChangePassword}
+          pwCurrent={pwCurrent}
+          setPwCurrent={setPwCurrent}
+          pwNew={pwNew}
+          setPwNew={setPwNew}
+          pwNew2={pwNew2}
+          setPwNew2={setPwNew2}
+          pwMsg={pwMsg}
+        />
+      )}
     </div>
   );
 }
 
+// Delete Modal Component
 function DeleteModal({ onClose, onResetData, onDeleteAccount }) {
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState("");
+  const [action, setAction] = useState(""); // "reset" or "delete"
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (action === "reset") {
+      onResetData(password);
+    } else if (action === "delete") {
+      onDeleteAccount(password);
+    }
+  };
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-      <div style={{ background: 'white', padding: '30px', borderRadius: '8px', width: '450px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
-        <h3 style={{ marginTop: 0, marginBottom: '10px' }}>계정 관리</h3>
-        <p style={{ color: '#64748b', marginBottom: '20px', fontSize: '15px', lineHeight: 1.6 }}>
-          데이터를 초기화하거나 계정을 삭제하려면, 보안을 위해 현재 계정의 비밀번호를 입력해주세요.
-        </p>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <h3 className="text-lg font-semibold mb-4">계정 관리</h3>
         
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="계정 비밀번호"
-          style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', marginBottom: '20px' }}
-        />
+        <div className="space-y-4 mb-6">
+          <button
+            onClick={() => setAction("reset")}
+            className={`w-full p-3 text-left rounded-lg border ${
+              action === "reset" 
+                ? "border-orange-500 bg-orange-50" 
+                : "border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            <div className="font-medium">데이터 초기화</div>
+            <div className="text-sm text-gray-600">모든 가게 정보를 초기화합니다</div>
+          </button>
+          
+          <button
+            onClick={() => setAction("delete")}
+            className={`w-full p-3 text-left rounded-lg border ${
+              action === "delete" 
+                ? "border-red-500 bg-red-50" 
+                : "border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            <div className="font-medium">계정 삭제</div>
+            <div className="text-sm text-gray-600">계정을 완전히 삭제합니다</div>
+          </button>
+        </div>
 
-        <button 
-          onClick={() => onResetData(password)}
-          style={{ width: '100%', padding: '12px', marginBottom: '12px', background: '#f59e0b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}>
-          정보 초기화
-        </button>
-        
-        <button 
-          onClick={() => onDeleteAccount(password)}
-          style={{ width: '100%', padding: '12px', marginBottom: '20px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}>
-          계정 완전 삭제
-        </button>
-
-        <button 
-          onClick={onClose}
-          style={{ width: '100%', padding: '10px', background: '#e2e8f0', color: '#334155', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '16px' }}>
-          취소
-        </button>
+        {action && (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                비밀번호 확인
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input"
+                placeholder="현재 비밀번호를 입력하세요"
+                required
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="btn btn-secondary flex-1"
+              >
+                취소
+              </button>
+              <button
+                type="submit"
+                className={`btn flex-1 ${
+                  action === "delete" ? "bg-red-600 hover:bg-red-700" : "btn-primary"
+                }`}
+              >
+                {action === "reset" ? "초기화" : "삭제"}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
 }
 
-function tabButtonStyle(active) {
-  return {
-    flex: 1,
-    padding: '12px 0',
-    border: 'none',
-    borderRadius: 6,
-    background: active ? '#3b82f6' : '#f5f6f7',
-    color: active ? '#fff' : '#222',
-    fontWeight: 600,
-    fontSize: 16,
-    cursor: 'pointer',
-    boxShadow: active ? '0 2px 8px rgba(59,130,246,0.08)' : 'none',
-    transition: 'background 0.2s, color 0.2s',
-  };
+// Password Change Modal Component
+function PasswordChangeModal({ 
+  onClose, 
+  onSubmit, 
+  pwCurrent, 
+  setPwCurrent, 
+  pwNew, 
+  setPwNew, 
+  pwNew2, 
+  setPwNew2, 
+  pwMsg 
+}) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <h3 className="text-lg font-semibold mb-4">비밀번호 변경</h3>
+        
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              현재 비밀번호
+            </label>
+            <input
+              type="password"
+              value={pwCurrent}
+              onChange={(e) => setPwCurrent(e.target.value)}
+              className="input"
+              placeholder="현재 비밀번호를 입력하세요"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              새 비밀번호
+            </label>
+            <input
+              type="password"
+              value={pwNew}
+              onChange={(e) => setPwNew(e.target.value)}
+              className="input"
+              placeholder="새 비밀번호를 입력하세요"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              새 비밀번호 확인
+            </label>
+            <input
+              type="password"
+              value={pwNew2}
+              onChange={(e) => setPwNew2(e.target.value)}
+              className="input"
+              placeholder="새 비밀번호를 다시 입력하세요"
+              required
+            />
+          </div>
+          
+          {pwMsg && (
+            <div className={`text-sm p-3 rounded-lg ${
+              pwMsg.includes("성공") 
+                ? "bg-green-100 text-green-800" 
+                : "bg-red-100 text-red-800"
+            }`}>
+              {pwMsg}
+            </div>
+          )}
+          
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn btn-secondary flex-1"
+            >
+              취소
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary flex-1"
+            >
+              변경
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 } 

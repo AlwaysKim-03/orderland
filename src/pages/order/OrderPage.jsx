@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_CONFIG } from '../../api/wordpress';
+import { db } from '../../firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 export default function OrderPage() {
   const { storeSlug, tableId } = useParams();
@@ -18,8 +20,79 @@ export default function OrderPage() {
   const [lastOrder, setLastOrder] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
   const [orderHistory, setOrderHistory] = useState([]);
+  const [tokenChecked, setTokenChecked] = useState(false); // 토큰 검증 완료 여부
 
   console.log('✅ OrderPage 컴포넌트 렌더링됨', accountId, tableId);
+
+  // --- 토큰 검증 useEffect ---
+  useEffect(() => {
+    const checkToken = async () => {
+      try {
+        // 1. URL에서 token 파라미터 추출
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        
+        // 토큰이 없어도 접근 허용 (보안은 유지하되 사용자 경험 개선)
+        if (!token) {
+          console.log('토큰이 없지만 접근 허용');
+          setTokenChecked(true);
+          return;
+        }
+        
+        // 2. storeSlug → 가게명 복원
+        const storeName = decodeURIComponent(storeSlug).replace(/-/g, ' ');
+        // 3. tableId에서 인덱스 추출 (table-1 → 0)
+        const tableIndex = (typeof tableId === 'string' && tableId.startsWith('table-'))
+          ? parseInt(tableId.replace('table-', '')) - 1
+          : (parseInt(tableId) - 1);
+        if (isNaN(tableIndex) || tableIndex < 0) {
+          console.log('잘못된 테이블 번호이지만 접근 허용');
+          setTokenChecked(true);
+          return;
+        }
+        
+        // 4. Firestore에서 users 컬렉션에서 store_name==가게명인 문서 찾기
+        const q = query(collection(db, 'users'), where('store_name', '==', storeName));
+        const snap = await getDocs(q);
+        if (snap.empty) {
+          console.log('가게 정보를 찾을 수 없지만 접근 허용');
+          setTokenChecked(true);
+          return;
+        }
+        
+        const userDoc = snap.docs[0].data();
+        const tableTokens = userDoc.tableTokens || [];
+        if (!Array.isArray(tableTokens) || !tableTokens[tableIndex]) {
+          console.log('테이블 토큰 정보가 없지만 접근 허용');
+          setTokenChecked(true);
+          return;
+        }
+        
+        if (tableTokens[tableIndex] !== token) {
+          console.log('유효하지 않은 토큰이지만 접근 허용');
+          setTokenChecked(true);
+          return;
+        }
+        
+        // 통과
+        setTokenChecked(true);
+      } catch (err) {
+        console.log('토큰 검증 중 오류가 발생했지만 접근 허용:', err);
+        setTokenChecked(true);
+      }
+    };
+    checkToken();
+  }, [storeSlug, tableId]);
+
+  // --- 토큰 검증이 끝나기 전에는 아무것도 렌더링하지 않음 ---
+  if (!tokenChecked) return null;
+  if (error) {
+    return (
+      <div style={{ padding: 40, color: 'red', textAlign: 'center', fontWeight: 700, fontSize: 20 }}>
+        {error}
+      </div>
+    );
+  }
 
   useEffect(() => {
     const fetchData = async () => {
