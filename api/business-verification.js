@@ -34,7 +34,8 @@ module.exports = async (req, res) => {
     
     // 환경변수 디버깅
     console.log('환경변수 확인:');
-    console.log('- TAX_OFFICE_SERVICE_KEY:', process.env.TAX_OFFICE_SERVICE_KEY ? '설정됨' : '설정되지 않음');
+    console.log('- NTS_API_KEY:', process.env.NTS_API_KEY ? '설정됨' : '설정되지 않음'); // 환경변수 이름 변경
+    console.log('- NTS_API_KEY 길이:', process.env.NTS_API_KEY ? process.env.NTS_API_KEY.length : 0);
     console.log('- TAX_OFFICE_API_URL:', process.env.TAX_OFFICE_API_URL || '기본값 사용');
     console.log('- NODE_ENV:', process.env.NODE_ENV);
     

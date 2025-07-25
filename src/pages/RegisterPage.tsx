@@ -225,23 +225,28 @@ const RegisterPage = () => {
       
       // 토큰 기반 인증 (Firebase 계정 생성 없이)
       const verificationToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6자리 코드
       
       console.log('🔑 생성된 인증 토큰:', verificationToken);
+      console.log('🔢 생성된 인증 코드:', verificationCode);
       
       // 임시 인증 정보를 localStorage에 저장
       localStorage.setItem('emailVerificationToken', verificationToken);
+      localStorage.setItem('emailVerificationCode', verificationCode);
       localStorage.setItem('tempUserEmail', formData.email);
       localStorage.setItem('tempUserPassword', formData.password);
+      localStorage.setItem('emailVerificationTime', Date.now().toString());
       
       console.log('💾 토큰 기반 인증 정보 저장 완료');
       
       // 실제 이메일 발송 (여기서는 시뮬레이션)
       console.log('📧 토큰 기반 이메일 발송 시뮬레이션');
+      console.log('📧 인증 코드:', verificationCode);
       
       setIsEmailVerificationSent(true);
       toast({
         title: "인증 메일이 발송되었습니다",
-        description: "이메일을 확인하여 인증을 완료해주세요. 스팸 메일함도 확인해보세요.",
+        description: `인증 코드: ${verificationCode} (개발용)`,
       });
     } catch (error: any) {
       console.error("❌ 이메일 인증 발송 오류:", error);
@@ -284,12 +289,16 @@ const RegisterPage = () => {
       // 토큰 기반 인증 확인
       const verificationToken = localStorage.getItem('emailVerificationToken');
       const tokenUserEmail = localStorage.getItem('tempUserEmail');
+      const verificationCode = localStorage.getItem('emailVerificationCode');
+      const verificationTime = localStorage.getItem('emailVerificationTime');
       
       console.log('📋 토큰 기반 인증 정보:');
       console.log('- verificationToken:', verificationToken ? '있음' : '없음');
       console.log('- tokenUserEmail:', tokenUserEmail);
+      console.log('- verificationCode:', verificationCode);
+      console.log('- verificationTime:', verificationTime);
       
-      if (!verificationToken || !tokenUserEmail) {
+      if (!verificationToken || !tokenUserEmail || !verificationCode || !verificationTime) {
         console.log('❌ 토큰 기반 인증 정보 부족');
         toast({
           title: "오류",
@@ -310,14 +319,54 @@ const RegisterPage = () => {
         });
         return;
       }
+
+      const currentTime = Date.now();
+      const elapsedTime = (currentTime - parseInt(verificationTime, 10)) / 1000; // 초 단위
+      console.log('🕒 경과 시간:', elapsedTime, '초');
+
+      if (elapsedTime > 300) { // 5분 (300초)
+        console.log('❌ 인증 코드 만료됨');
+        toast({
+          title: "인증 코드 만료",
+          description: "인증 코드가 만료되었습니다. 새로운 인증 메일을 요청해주세요.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // 인증 코드 입력 요구
+      const userInputCode = prompt('이메일로 받은 6자리 인증 코드를 입력해주세요:');
+      if (!userInputCode) {
+        console.log('❌ 인증 코드 입력 취소');
+        toast({
+          title: "인증 취소",
+          description: "인증 코드 입력이 취소되었습니다.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      if (userInputCode !== verificationCode) {
+        console.log('❌ 인증 코드 불일치');
+        console.log('입력된 코드:', userInputCode);
+        console.log('저장된 코드:', verificationCode);
+        toast({
+          title: "인증 코드 불일치",
+          description: "인증 코드가 일치하지 않습니다. 다시 확인해주세요.",
+          variant: "destructive"
+        });
+        return;
+      }
       
-      // 토큰이 있으면 인증 완료로 처리
-      if (verificationToken) {
+      // 토큰이 있고 코드가 일치하면 인증 완료로 처리
+      if (verificationToken && userInputCode === verificationCode) {
         console.log('✅ 토큰 기반 인증 완료');
         setIsEmailVerified(true);
         
         // 인증 완료 후 토큰 삭제
         localStorage.removeItem('emailVerificationToken');
+        localStorage.removeItem('emailVerificationCode');
+        localStorage.removeItem('emailVerificationTime');
         console.log('🗑️ 인증 토큰 삭제 완료');
         
         toast({
@@ -583,6 +632,8 @@ const RegisterPage = () => {
         localStorage.removeItem('tempUserEmail');
         localStorage.removeItem('tempUserPassword');
         localStorage.removeItem('emailVerificationToken');
+        localStorage.removeItem('emailVerificationCode');
+        localStorage.removeItem('emailVerificationTime');
         console.log('✅ 임시 정보 삭제 완료');
 
         console.log('🎉 회원가입 완료!');
