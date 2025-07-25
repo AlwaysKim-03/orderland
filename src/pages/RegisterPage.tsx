@@ -3,12 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Store, ArrowLeft, Phone, User, Building, Mail, Lock, Calendar as CalendarIcon, Check, RefreshCw } from "lucide-react";
+import { Store, ArrowLeft, Phone, User, Building, Mail, Lock, Check, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification as firebaseSendEmailVerification, onAuthStateChanged, RecaptchaVerifier, signInWithPhoneNumber, signInWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
@@ -23,8 +20,6 @@ const RegisterPage = () => {
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [isEmailVerificationSent, setIsEmailVerificationSent] = useState(false);
-  const [isBusinessVerified, setIsBusinessVerified] = useState(false);
-  const [openingDate, setOpeningDate] = useState<Date>();
   const [confirmationResult, setConfirmationResult] = useState<any>(null);
   const [recaptchaVerifier, setRecaptchaVerifier] = useState<any>(null);
   const [phoneVerificationCode, setPhoneVerificationCode] = useState<string>("");
@@ -47,11 +42,7 @@ const RegisterPage = () => {
     storeName: "",
     email: "",
     password: "",
-    confirmPassword: "",
-    // Step 3 - Business verification
-    businessNumber: "",
-    ownerName: "",
-    businessName: ""
+    confirmPassword: ""
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -444,14 +435,9 @@ const RegisterPage = () => {
     }
     
     if (validateStep2()) {
-      setCurrentStep(3);
+      // 2단계에서 바로 회원가입 완료
+      completeRegistration();
     }
-  };
-
-  const validateBusinessNumber = (number: string) => {
-    // Remove all non-digits and check if it's 10 digits
-    const cleanNumber = number.replace(/[^\d]/g, '');
-    return cleanNumber.length === 10;
   };
 
   const completeRegistration = async () => {
@@ -461,205 +447,75 @@ const RegisterPage = () => {
     console.log('전화번호 인증 상태:', isPhoneVerified);
     console.log('이메일 인증 상태:', isEmailVerified);
     
-    const newErrors: Record<string, string> = {};
+    // 전화번호 인증 확인
+    const phoneVerificationToken = localStorage.getItem('phoneVerificationToken');
+    const tempUserPhone = localStorage.getItem('tempUserPhone');
+    const tempUserName = localStorage.getItem('tempUserName');
     
-    if (!validateBusinessNumber(formData.businessNumber)) {
-      newErrors.businessNumber = "올바른 사업자 등록번호를 입력해주세요 (10자리 숫자)";
+    console.log('📋 전화번호 인증 정보:');
+    console.log('- phoneVerificationToken:', phoneVerificationToken ? '있음' : '없음');
+    console.log('- tempUserPhone:', tempUserPhone);
+    console.log('- tempUserName:', tempUserName);
+    
+    if (!phoneVerificationToken || !tempUserPhone || !tempUserName) {
+      console.log('❌ 전화번호 인증 정보 부족');
+      toast({
+        title: "전화번호 인증 필요",
+        description: "전화번호 인증을 먼저 완료해주세요.",
+        variant: "destructive"
+      });
+      setCurrentStep(1);
+      setIsLoading(false);
+      return;
     }
-    if (!formData.ownerName) newErrors.ownerName = "대표자명을 입력해주세요";
-    if (!formData.businessName) newErrors.businessName = "사업자 상호명을 입력해주세요";
-    if (!openingDate) newErrors.openingDate = "개업일자를 선택해주세요";
     
-    setErrors(newErrors);
+    if (tempUserPhone !== formData.phone || tempUserName !== formData.name) {
+      console.log('❌ 전화번호 또는 이름 불일치');
+      toast({
+        title: "인증 정보 불일치",
+        description: "전화번호 또는 이름이 일치하지 않습니다.",
+        variant: "destructive"
+      });
+      setCurrentStep(1);
+      setIsLoading(false);
+      return;
+    }
     
-    if (Object.keys(newErrors).length === 0) {
-      console.log('✅ 입력값 검증 통과');
-      
-      // 전화번호 인증 확인
-      const phoneVerificationToken = localStorage.getItem('phoneVerificationToken');
-      const tempUserPhone = localStorage.getItem('tempUserPhone');
-      const tempUserName = localStorage.getItem('tempUserName');
-      
-      console.log('📋 전화번호 인증 정보:');
-      console.log('- phoneVerificationToken:', phoneVerificationToken ? '있음' : '없음');
-      console.log('- tempUserPhone:', tempUserPhone);
-      console.log('- tempUserName:', tempUserName);
-      
-      if (!phoneVerificationToken || !tempUserPhone || !tempUserName) {
-        console.log('❌ 전화번호 인증 정보 부족');
-        toast({
-          title: "전화번호 인증 필요",
-          description: "전화번호 인증을 먼저 완료해주세요.",
-          variant: "destructive"
-        });
-        setCurrentStep(1);
-        setIsLoading(false);
-        return;
-      }
-      
-      if (tempUserPhone !== formData.phone || tempUserName !== formData.name) {
-        console.log('❌ 전화번호 또는 이름 불일치');
-        toast({
-          title: "인증 정보 불일치",
-          description: "전화번호 또는 이름이 일치하지 않습니다.",
-          variant: "destructive"
-        });
-        setCurrentStep(1);
-        setIsLoading(false);
-        return;
-      }
-      
-      console.log('✅ 전화번호 인증 확인 통과');
-      
-      // 이메일 인증 확인
-      if (!isEmailVerified) {
-        console.log('❌ 이메일 인증 미완료');
-        toast({
-          title: "이메일 인증 필요",
-          description: "이메일 인증을 완료해주세요.",
-          variant: "destructive"
-        });
-        setCurrentStep(2);
-        setIsLoading(false);
-        return;
-      }
-      
-      console.log('✅ 이메일 인증 확인 통과');
-      setIsLoading(true);
+    console.log('✅ 전화번호 인증 확인 통과');
+    
+    // 이메일 인증 확인
+    if (!isEmailVerified) {
+      console.log('❌ 이메일 인증 미완료');
+      toast({
+        title: "이메일 인증 필요",
+        description: "이메일 인증을 완료해주세요.",
+        variant: "destructive"
+      });
+      setCurrentStep(2);
+      setIsLoading(false);
+      return;
+    }
+    
+    console.log('✅ 이메일 인증 확인 통과');
+    setIsLoading(true);
+    
+    try {
+      // 모든 인증이 완료된 후 Firebase 계정 생성
+      let userCredential;
+      console.log('🟡 Firebase 계정 생성 시작');
       
       try {
-        // 모든 인증이 완료된 후 Firebase 계정 생성
-        let userCredential;
-        console.log('🟡 Firebase 계정 생성 시작');
-        
-        try {
-          // 새 Firebase 계정 생성
-          userCredential = await createUserWithEmailAndPassword(
-            auth,
-            formData.email,
-            formData.password
-          );
-          console.log('✅ Firebase 계정 생성 성공:', userCredential.user.uid);
-        } catch (error: any) {
-          console.error('❌ Firebase 계정 생성 실패:', error);
-          
-          let errorMessage = "계정 생성 중 오류가 발생했습니다.";
-          
-          if (error.code === "auth/email-already-in-use") {
-            errorMessage = "이미 사용 중인 이메일입니다.";
-          } else if (error.code === "auth/weak-password") {
-            errorMessage = "비밀번호가 너무 약합니다.";
-          } else if (error.code === "auth/invalid-email") {
-            errorMessage = "유효하지 않은 이메일 형식입니다.";
-          }
-          
-          toast({
-            title: "계정 생성 실패",
-            description: errorMessage,
-            variant: "destructive"
-          });
-          setIsLoading(false);
-          return;
-        }
-        
-        const user = userCredential.user;
-        console.log('👤 최종 사용자 정보:', user.uid);
-
-        console.log('📝 사용자 프로필 업데이트...');
-        // 사용자 프로필 업데이트
-        await updateProfile(user, {
-          displayName: formData.name
-        });
-        console.log('✅ 프로필 업데이트 완료');
-
-        console.log('💾 Firestore에 사용자 정보 저장...');
-        // Firestore에 사용자 정보 저장 (사업자 인증 정보 포함)
-        await setDoc(doc(db, "users", user.uid), {
-          uid: user.uid,
-          businessNumber: formData.businessNumber.replace(/[^\d]/g, ''),
-          businessName: formData.businessName,
-          ownerName: formData.ownerName,
-          email: formData.email,
-          phoneNumber: formData.phone,
-          storeName: formData.storeName,
-          role: "admin",
-          createdAt: new Date(),
-          isActive: true,
-          openingDate: openingDate,
-          emailVerified: true,
-          phoneVerified: true,
-          businessVerified: false,
-          businessVerificationData: null
-        });
-        console.log('✅ Firestore 사용자 정보 저장 완료');
-
-        console.log('⚙️ 기본 설정 데이터 생성...');
-        // 기본 설정 데이터 생성
-        await setDoc(doc(db, "settings", "store"), {
-          storeName: formData.storeName,
-          storeAddress: "",
-          storePhone: formData.phone,
-          businessHours: {
-            monday: { open: "09:00", close: "22:00", closed: false },
-            tuesday: { open: "09:00", close: "22:00", closed: false },
-            wednesday: { open: "09:00", close: "22:00", closed: false },
-            thursday: { open: "09:00", close: "22:00", closed: false },
-            friday: { open: "09:00", close: "22:00", closed: false },
-            saturday: { open: "10:00", close: "23:00", closed: false },
-            sunday: { open: "10:00", close: "22:00", closed: false },
-          },
-          notifications: {
-            newOrders: true,
-            orderUpdates: true,
-            reservations: true,
-            salesAlerts: true,
-            systemUpdates: false,
-          },
-          qrSettings: {
-            size: "medium",
-            includeLogo: true,
-            autoGenerate: true,
-          },
-          customMessages: {
-            orderComplete: "주문이 완료되었습니다. 맛있게 드세요! 😊",
-            reservationConfirmed: "예약이 확정되었습니다. 방문을 기다리겠습니다! 🎉",
-            servingComplete: "주문하신 음식이 준비되었습니다. 맛있게 드세요! 🍽️",
-          },
-          updatedAt: new Date()
-        });
-        console.log('✅ 기본 설정 데이터 생성 완료');
-
-        console.log('🗑️ 임시 정보 정리...');
-        // 임시 정보 삭제
-        localStorage.removeItem('tempUserUid');
-        localStorage.removeItem('tempUserEmail');
-        localStorage.removeItem('tempUserPassword');
-        localStorage.removeItem('emailVerificationToken');
-        localStorage.removeItem('emailVerificationCode');
-        localStorage.removeItem('emailVerificationTime');
-        localStorage.removeItem('phoneVerificationToken');
-        localStorage.removeItem('tempUserPhone');
-        localStorage.removeItem('tempUserName');
-        localStorage.removeItem('phoneVerificationTime');
-        console.log('✅ 임시 정보 삭제 완료');
-
-        console.log('🎉 회원가입 완료!');
-        toast({
-          title: "회원가입이 완료되었습니다! 🎉",
-          description: "관리자 대시보드로 이동합니다.",
-        });
-        
-        // 회원가입 완료 시 localStorage 정리
-        localStorage.removeItem('isRegistering');
-        
-        console.log('🔄 관리자 페이지로 이동...');
-        navigate("/admin");
+        // 새 Firebase 계정 생성
+        userCredential = await createUserWithEmailAndPassword(
+          auth,
+          formData.email,
+          formData.password
+        );
+        console.log('✅ Firebase 계정 생성 성공:', userCredential.user.uid);
       } catch (error: any) {
-        console.error("❌ 회원가입 오류:", error);
-        console.log('오류 코드:', error.code);
-        console.log('오류 메시지:', error.message);
+        console.error('❌ Firebase 계정 생성 실패:', error);
         
-        let errorMessage = "회원가입 중 오류가 발생했습니다.";
+        let errorMessage = "계정 생성 중 오류가 발생했습니다.";
         
         if (error.code === "auth/email-already-in-use") {
           errorMessage = "이미 사용 중인 이메일입니다.";
@@ -670,16 +526,129 @@ const RegisterPage = () => {
         }
         
         toast({
-          title: "회원가입 실패",
+          title: "계정 생성 실패",
           description: errorMessage,
           variant: "destructive"
         });
-      } finally {
         setIsLoading(false);
-        console.log('=== 회원가입 완료 프로세스 종료 ===');
+        return;
       }
-    } else {
-      console.log('❌ 입력값 검증 실패:', newErrors);
+      
+      const user = userCredential.user;
+      console.log('👤 최종 사용자 정보:', user.uid);
+
+      console.log('📝 사용자 프로필 업데이트...');
+      // 사용자 프로필 업데이트
+      await updateProfile(user, {
+        displayName: formData.name
+      });
+      console.log('✅ 프로필 업데이트 완료');
+
+      console.log('💾 Firestore에 사용자 정보 저장...');
+      // Firestore에 사용자 정보 저장
+      await setDoc(doc(db, "users", user.uid), {
+        uid: user.uid,
+        businessNumber: "",
+        businessName: "",
+        ownerName: formData.name,
+        email: formData.email,
+        phoneNumber: formData.phone,
+        storeName: formData.storeName,
+        role: "admin",
+        createdAt: new Date(),
+        isActive: true,
+        openingDate: null,
+        emailVerified: true,
+        phoneVerified: true,
+        businessVerified: false,
+        businessVerificationData: null
+      });
+      console.log('✅ Firestore 사용자 정보 저장 완료');
+
+      console.log('⚙️ 기본 설정 데이터 생성...');
+      // 기본 설정 데이터 생성
+      await setDoc(doc(db, "settings", "store"), {
+        storeName: formData.storeName,
+        storeAddress: "",
+        storePhone: formData.phone,
+        businessHours: {
+          monday: { open: "09:00", close: "22:00", closed: false },
+          tuesday: { open: "09:00", close: "22:00", closed: false },
+          wednesday: { open: "09:00", close: "22:00", closed: false },
+          thursday: { open: "09:00", close: "22:00", closed: false },
+          friday: { open: "09:00", close: "22:00", closed: false },
+          saturday: { open: "10:00", close: "23:00", closed: false },
+          sunday: { open: "10:00", close: "22:00", closed: false },
+        },
+        notifications: {
+          newOrders: true,
+          orderUpdates: true,
+          reservations: true,
+          salesAlerts: true,
+          systemUpdates: false,
+        },
+        qrSettings: {
+          size: "medium",
+          includeLogo: true,
+          autoGenerate: true,
+        },
+        customMessages: {
+          orderComplete: "주문이 완료되었습니다. 맛있게 드세요! 😊",
+          reservationConfirmed: "예약이 확정되었습니다. 방문을 기다리겠습니다! 🎉",
+          servingComplete: "주문하신 음식이 준비되었습니다. 맛있게 드세요! 🍽️",
+        },
+        updatedAt: new Date()
+      });
+      console.log('✅ 기본 설정 데이터 생성 완료');
+
+      console.log('🗑️ 임시 정보 정리...');
+      // 임시 정보 삭제
+      localStorage.removeItem('tempUserUid');
+      localStorage.removeItem('tempUserEmail');
+      localStorage.removeItem('tempUserPassword');
+      localStorage.removeItem('emailVerificationToken');
+      localStorage.removeItem('emailVerificationCode');
+      localStorage.removeItem('emailVerificationTime');
+      localStorage.removeItem('phoneVerificationToken');
+      localStorage.removeItem('tempUserPhone');
+      localStorage.removeItem('tempUserName');
+      localStorage.removeItem('phoneVerificationTime');
+      console.log('✅ 임시 정보 삭제 완료');
+
+      console.log('🎉 회원가입 완료!');
+      toast({
+        title: "회원가입이 완료되었습니다! 🎉",
+        description: "관리자 대시보드로 이동합니다.",
+      });
+      
+      // 회원가입 완료 시 localStorage 정리
+      localStorage.removeItem('isRegistering');
+      
+      console.log('🔄 관리자 페이지로 이동...');
+      navigate("/admin");
+    } catch (error: any) {
+      console.error("❌ 회원가입 오류:", error);
+      console.log('오류 코드:', error.code);
+      console.log('오류 메시지:', error.message);
+      
+      let errorMessage = "회원가입 중 오류가 발생했습니다.";
+      
+      if (error.code === "auth/email-already-in-use") {
+        errorMessage = "이미 사용 중인 이메일입니다.";
+      } else if (error.code === "auth/weak-password") {
+        errorMessage = "비밀번호가 너무 약합니다.";
+      } else if (error.code === "auth/invalid-email") {
+        errorMessage = "유효하지 않은 이메일 형식입니다.";
+      }
+      
+      toast({
+        title: "회원가입 실패",
+        description: errorMessage,
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+      console.log('=== 회원가입 완료 프로세스 종료 ===');
     }
   };
 
@@ -709,7 +678,7 @@ const RegisterPage = () => {
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex items-center justify-center space-x-4">
-            {[1, 2, 3].map((step) => (
+            {[1, 2].map((step) => (
               <div key={step} className="flex items-center">
                 <div
                   className={cn(
@@ -721,7 +690,7 @@ const RegisterPage = () => {
                 >
                   {currentStep > step ? <Check className="w-5 h-5" /> : step}
                 </div>
-                {step < 3 && (
+                {step < 2 && (
                   <div
                     className={cn(
                       "w-16 h-1 mx-2 rounded transition-colors",
@@ -738,9 +707,6 @@ const RegisterPage = () => {
             </span>
             <span className={cn("text-sm", currentStep >= 2 ? "text-primary font-medium" : "text-muted-foreground")}>
               가게정보 입력
-            </span>
-            <span className={cn("text-sm", currentStep >= 3 ? "text-primary font-medium" : "text-muted-foreground")}>
-              사업자 인증
             </span>
           </div>
         </div>
@@ -1020,136 +986,7 @@ const RegisterPage = () => {
                 className="w-full h-12 text-base"
                 size="lg"
               >
-                다음 단계로
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Step 3: Business Verification */}
-        {currentStep === 3 && (
-          <Card className="mx-auto max-w-2xl animate-fade-in">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-xl">3단계 - 사업자 등록 인증</CardTitle>
-                  <CardDescription>
-                    사업자 정보를 입력하여 인증을 완료해주세요
-                  </CardDescription>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentStep(2)}
-                  className="text-sm"
-                >
-                  <ArrowLeft className="w-4 h-4 mr-1" />
-                  이전 단계
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="businessNumber">사업자 등록번호</Label>
-                  <Input
-                    id="businessNumber"
-                    name="businessNumber"
-                    placeholder="123-45-67890"
-                    value={formData.businessNumber}
-                    onChange={handleInputChange}
-                    className="h-12 text-base"
-                  />
-                  {errors.businessNumber && (
-                    <p className="text-sm text-destructive">{errors.businessNumber}</p>
-                  )}
-                  <p className="text-sm text-muted-foreground">
-                    사업자 정보는 국세청 등록 내용 기준으로 입력해주세요
-                  </p>
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm text-blue-800">
-                      🔍 <strong>사업자 인증 안내</strong><br/>
-                      • 국세청 오픈API를 통해 실시간으로 사업자 정보를 검증합니다<br/>
-                      • 사업자등록번호, 개업일자, 대표자명, 상호명이 모두 일치해야 합니다<br/>
-                      • 인증 완료 후 회원가입이 진행됩니다
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>개업일자</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "h-12 w-full justify-start text-left font-normal",
-                          !openingDate && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {openingDate ? format(openingDate, "yyyy년 MM월 dd일") : "날짜 선택"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={openingDate}
-                        onSelect={setOpeningDate}
-                        initialFocus
-                        className="pointer-events-auto"
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  {errors.openingDate && (
-                    <p className="text-sm text-destructive">{errors.openingDate}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="ownerName">대표자명</Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="ownerName"
-                    name="ownerName"
-                    placeholder="홍길동"
-                    value={formData.ownerName}
-                    onChange={handleInputChange}
-                    className="pl-10 h-12 text-base"
-                  />
-                </div>
-                {errors.ownerName && (
-                  <p className="text-sm text-destructive">{errors.ownerName}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="businessName">사업자 상호명</Label>
-                <div className="relative">
-                  <Building className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="businessName"
-                    name="businessName"
-                    placeholder="주식회사 돈까스상회"
-                    value={formData.businessName}
-                    onChange={handleInputChange}
-                    className="pl-10 h-12 text-base"
-                  />
-                </div>
-                {errors.businessName && (
-                  <p className="text-sm text-destructive">{errors.businessName}</p>
-                )}
-              </div>
-
-              <Button
-                onClick={completeRegistration}
-                disabled={isLoading}
-                className="w-full h-14 text-lg bg-green-600 hover:bg-green-700"
-                size="lg"
-              >
-                {isLoading ? "인증 중..." : "✅ 사업자 인증 및 가입 완료"}
+                회원가입 완료
               </Button>
             </CardContent>
           </Card>
