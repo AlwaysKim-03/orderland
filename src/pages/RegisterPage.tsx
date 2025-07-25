@@ -213,7 +213,7 @@ const RegisterPage = () => {
     
     setIsLoading(true);
     try {
-      // 임시 Firebase 계정 생성 (이메일 인증용)
+      // 실제 Firebase 계정 생성 (이메일 인증용)
       const tempUserCredential = await createUserWithEmailAndPassword(
         auth,
         formData.email,
@@ -223,7 +223,10 @@ const RegisterPage = () => {
       const tempUser = tempUserCredential.user;
       
       // 이메일 인증 메일 발송
-      await firebaseSendEmailVerification(tempUser);
+      await firebaseSendEmailVerification(tempUser, {
+        url: window.location.origin + '/login', // 인증 후 리다이렉트 URL
+        handleCodeInApp: false
+      });
       
       // 임시 사용자 정보를 localStorage에 저장
       localStorage.setItem('tempUserUid', tempUser.uid);
@@ -232,7 +235,7 @@ const RegisterPage = () => {
       setIsEmailVerificationSent(true);
       toast({
         title: "인증 메일이 발송되었습니다",
-        description: "이메일을 확인하여 인증을 완료해주세요.",
+        description: "이메일을 확인하여 인증을 완료해주세요. 스팸 메일함도 확인해보세요.",
       });
     } catch (error: any) {
       console.error("이메일 인증 발송 오류:", error);
@@ -245,6 +248,8 @@ const RegisterPage = () => {
         errorMessage = "이미 사용 중인 이메일입니다.";
       } else if (error.code === "auth/weak-password") {
         errorMessage = "비밀번호가 너무 약합니다.";
+      } else if (error.code === "auth/too-many-requests") {
+        errorMessage = "너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요.";
       }
       
       toast({
@@ -408,6 +413,7 @@ const RegisterPage = () => {
           description: "이메일 인증을 완료해주세요.",
           variant: "destructive"
         });
+        setIsLoading(false);
         return;
       }
       
