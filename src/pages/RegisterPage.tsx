@@ -221,16 +221,16 @@ const RegisterPage = () => {
     
     setIsLoading(true);
     try {
-      // 개발 모드에서는 이메일 인증 우회
-      if (import.meta.env.DEV) {
-        console.log('🟢 개발 모드: 이메일 인증 우회');
-        setIsEmailVerified(true);
-        toast({
-          title: "개발 모드",
-          description: "이메일 인증이 자동으로 완료되었습니다.",
-        });
-        return;
-      }
+      // 개발 모드에서는 이메일 인증 우회 (임시로 비활성화)
+      // if (import.meta.env.DEV) {
+      //   console.log('🟢 개발 모드: 이메일 인증 우회');
+      //   setIsEmailVerified(true);
+      //   toast({
+      //     title: "개발 모드",
+      //     description: "이메일 인증이 자동으로 완료되었습니다.",
+      //   });
+      //   return;
+      // }
       
       console.log('🟡 프로덕션 모드: Firebase 이메일 인증 시도');
       
@@ -328,16 +328,16 @@ const RegisterPage = () => {
     console.log('현재 환경:', import.meta.env.MODE);
     console.log('개발 모드 여부:', import.meta.env.DEV);
     
-    // 개발 모드에서는 인증 상태 확인 우회
-    if (import.meta.env.DEV) {
-      console.log('🟢 개발 모드: 이메일 인증 상태 확인 우회');
-      setIsEmailVerified(true);
-      toast({
-        title: "개발 모드",
-        description: "이메일 인증이 완료되었습니다.",
-      });
-      return;
-    }
+    // 개발 모드에서는 인증 상태 확인 우회 (임시로 비활성화)
+    // if (import.meta.env.DEV) {
+    //   console.log('🟢 개발 모드: 이메일 인증 상태 확인 우회');
+    //   setIsEmailVerified(true);
+    //   toast({
+    //     title: "개발 모드",
+    //     description: "이메일 인증이 완료되었습니다.",
+    //   });
+    //   return;
+    // }
     
     console.log('🟡 프로덕션 모드: 이메일 인증 상태 확인');
     
@@ -542,8 +542,9 @@ const RegisterPage = () => {
     if (Object.keys(newErrors).length === 0) {
       console.log('✅ 입력값 검증 통과');
       
-      // 이메일 인증 확인
-      if (!isEmailVerified && !import.meta.env.DEV) {
+      // 이메일 인증 확인 (임시로 개발 모드 우회 비활성화)
+      // if (!isEmailVerified && !import.meta.env.DEV) {
+      if (!isEmailVerified) {
         console.log('❌ 이메일 인증 미완료');
         toast({
           title: "이메일 인증 필요",
