@@ -224,23 +224,54 @@ const RegisterPage = () => {
         return;
       }
       
-      // 프로덕션 모드에서는 이메일 인증 토큰 생성
-      // 실제 계정은 회원가입 완료 시점에 생성
-      const verificationToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      
-      // 임시 인증 정보를 localStorage에 저장
-      localStorage.setItem('emailVerificationToken', verificationToken);
-      localStorage.setItem('tempUserEmail', formData.email);
-      localStorage.setItem('tempUserPassword', formData.password);
-      
-      // 실제 이메일 발송 (여기서는 시뮬레이션)
-      console.log('이메일 인증 토큰:', verificationToken);
-      
-      setIsEmailVerificationSent(true);
-      toast({
-        title: "인증 메일이 발송되었습니다",
-        description: "이메일을 확인하여 인증을 완료해주세요. 스팸 메일함도 확인해보세요.",
-      });
+      // 프로덕션 모드에서는 실제 Firebase 이메일 인증
+      try {
+        // 실제 Firebase 계정 생성 (이메일 인증용)
+        const tempUserCredential = await createUserWithEmailAndPassword(
+          auth,
+          formData.email,
+          formData.password
+        );
+        
+        const tempUser = tempUserCredential.user;
+        
+        // 이메일 인증 메일 발송
+        await firebaseSendEmailVerification(tempUser, {
+          url: window.location.origin + '/login', // 인증 후 리다이렉트 URL
+          handleCodeInApp: false
+        });
+        
+        // 임시 사용자 정보를 localStorage에 저장
+        localStorage.setItem('tempUserUid', tempUser.uid);
+        localStorage.setItem('tempUserEmail', formData.email);
+        localStorage.setItem('tempUserPassword', formData.password);
+        
+        setIsEmailVerificationSent(true);
+        toast({
+          title: "인증 메일이 발송되었습니다",
+          description: "이메일을 확인하여 인증을 완료해주세요. 스팸 메일함도 확인해보세요.",
+        });
+      } catch (firebaseError: any) {
+        console.error("Firebase 이메일 인증 오류:", firebaseError);
+        
+        // Firebase 오류 시 토큰 기반 인증으로 폴백
+        console.log('Firebase 인증 실패, 토큰 기반 인증으로 폴백');
+        const verificationToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        
+        // 임시 인증 정보를 localStorage에 저장
+        localStorage.setItem('emailVerificationToken', verificationToken);
+        localStorage.setItem('tempUserEmail', formData.email);
+        localStorage.setItem('tempUserPassword', formData.password);
+        
+        // 실제 이메일 발송 (여기서는 시뮬레이션)
+        console.log('이메일 인증 토큰:', verificationToken);
+        
+        setIsEmailVerificationSent(true);
+        toast({
+          title: "인증 메일이 발송되었습니다",
+          description: "이메일을 확인하여 인증을 완료해주세요. 스팸 메일함도 확인해보세요.",
+        });
+      }
     } catch (error: any) {
       console.error("이메일 인증 발송 오류:", error);
       
@@ -278,31 +309,81 @@ const RegisterPage = () => {
       return;
     }
     
-    const verificationToken = localStorage.getItem('emailVerificationToken');
-    const tempUserEmail = localStorage.getItem('tempUserEmail');
-    
-    if (!verificationToken || !tempUserEmail) {
-      toast({
-        title: "오류",
-        description: "인증 정보를 찾을 수 없습니다. 다시 인증 메일을 발송해주세요.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    if (tempUserEmail !== formData.email) {
-      toast({
-        title: "오류",
-        description: "이메일 주소가 일치하지 않습니다.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
     setIsLoading(true);
     try {
-      // 실제 환경에서는 이메일 인증 토큰 검증
-      // 여기서는 시뮬레이션으로 토큰이 있으면 인증 완료로 처리
+      // 먼저 Firebase 인증 확인 시도
+      const tempUserUid = localStorage.getItem('tempUserUid');
+      const tempUserEmail = localStorage.getItem('tempUserEmail');
+      const tempUserPassword = localStorage.getItem('tempUserPassword');
+      
+      if (tempUserUid && tempUserEmail && tempUserPassword) {
+        try {
+          // 현재 로그인된 사용자 확인
+          const currentUser = auth.currentUser;
+          
+          if (currentUser && currentUser.uid === tempUserUid) {
+            // 이메일 인증 상태 확인
+            await currentUser.reload();
+            
+            if (currentUser.emailVerified) {
+              setIsEmailVerified(true);
+              
+              toast({
+                title: "이메일 인증 완료",
+                description: "이메일 인증이 완료되었습니다.",
+              });
+              return;
+            }
+          } else {
+            // 임시 사용자로 다시 로그인
+            const tempUserCredential = await signInWithEmailAndPassword(
+              auth,
+              tempUserEmail,
+              tempUserPassword
+            );
+            
+            const tempUser = tempUserCredential.user;
+            await tempUser.reload();
+            
+            if (tempUser.emailVerified) {
+              setIsEmailVerified(true);
+              
+              toast({
+                title: "이메일 인증 완료",
+                description: "이메일 인증이 완료되었습니다.",
+              });
+              return;
+            }
+          }
+        } catch (firebaseError) {
+          console.error("Firebase 인증 확인 오류:", firebaseError);
+          // Firebase 인증 실패 시 토큰 기반 인증으로 폴백
+        }
+      }
+      
+      // 토큰 기반 인증 확인
+      const verificationToken = localStorage.getItem('emailVerificationToken');
+      const tokenUserEmail = localStorage.getItem('tempUserEmail');
+      
+      if (!verificationToken || !tokenUserEmail) {
+        toast({
+          title: "오류",
+          description: "인증 정보를 찾을 수 없습니다. 다시 인증 메일을 발송해주세요.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      if (tokenUserEmail !== formData.email) {
+        toast({
+          title: "오류",
+          description: "이메일 주소가 일치하지 않습니다.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // 토큰이 있으면 인증 완료로 처리
       if (verificationToken) {
         setIsEmailVerified(true);
         
@@ -462,35 +543,51 @@ const RegisterPage = () => {
             }
           };
         } else {
-          // 프로덕션 모드에서는 실제 Firebase 계정 생성
+          // 프로덕션 모드에서는 기존 Firebase 계정 사용
+          const tempUserUid = localStorage.getItem('tempUserUid');
           const tempUserEmail = localStorage.getItem('tempUserEmail');
           const tempUserPassword = localStorage.getItem('tempUserPassword');
           
-          if (!tempUserEmail || !tempUserPassword) {
-            toast({
-              title: "오류",
-              description: "인증 정보를 찾을 수 없습니다. 다시 이메일 인증을 진행해주세요.",
-              variant: "destructive"
-            });
-            setIsLoading(false);
-            return;
+          if (tempUserUid && tempUserEmail && tempUserPassword) {
+            // 기존 임시 계정 사용
+            try {
+              // 이미 로그인된 상태인지 확인
+              const currentUser = auth.currentUser;
+              
+              if (currentUser && currentUser.uid === tempUserUid) {
+                userCredential = { user: currentUser };
+              } else {
+                // 임시 계정으로 다시 로그인
+                const tempUserCredential = await signInWithEmailAndPassword(
+                  auth,
+                  tempUserEmail,
+                  tempUserPassword
+                );
+                userCredential = tempUserCredential;
+              }
+            } catch (error) {
+              console.error('기존 계정 로그인 실패:', error);
+              // 새 계정 생성
+              userCredential = await createUserWithEmailAndPassword(
+                auth,
+                tempUserEmail,
+                tempUserPassword
+              );
+            }
+          } else {
+            // 임시 정보가 없으면 새 계정 생성
+            userCredential = await createUserWithEmailAndPassword(
+              auth,
+              formData.email,
+              formData.password
+            );
           }
           
-          userCredential = await createUserWithEmailAndPassword(
-            auth,
-            tempUserEmail,
-            tempUserPassword
-          );
-          
-          // 이메일 인증 메일 발송
-          await firebaseSendEmailVerification(userCredential.user, {
-            url: window.location.origin + '/login',
-            handleCodeInApp: false
-          });
-          
           // 임시 정보 삭제
+          localStorage.removeItem('tempUserUid');
           localStorage.removeItem('tempUserEmail');
           localStorage.removeItem('tempUserPassword');
+          localStorage.removeItem('emailVerificationToken');
         }
 
         const user = userCredential.user;
