@@ -1,0 +1,13 @@
+RewriteEngine On
+
+# 정적 파일들은 그대로 서비스
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^(.*)$ $1 [L]
+
+# assets 폴더는 그대로 서비스
+RewriteRule ^assets/(.*)$ assets/$1 [L]
+
+# 기타 모든 요청은 index.html로 리다이렉트
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ /index.html [L] 

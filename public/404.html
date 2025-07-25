@@ -7,6 +7,21 @@
       // GitHub Pages에서 SPA 라우팅을 위한 리다이렉트
       var pathSegmentsToKeep = 1;
       var l = window.location;
+      
+      // 정적 파일 경로는 건드리지 않음
+      if (l.pathname.includes('/assets/') || 
+          l.pathname.includes('.js') || 
+          l.pathname.includes('.css') || 
+          l.pathname.includes('.ico') ||
+          l.pathname.includes('.png') ||
+          l.pathname.includes('.jpg') ||
+          l.pathname.includes('.svg') ||
+          l.pathname.includes('.woff') ||
+          l.pathname.includes('.woff2')) {
+        return;
+      }
+      
+      // SPA 라우팅을 위한 리다이렉트
       l.replace(
         l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
         l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
