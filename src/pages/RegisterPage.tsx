@@ -589,19 +589,14 @@ const RegisterPage = () => {
           console.log('✅ 사업자 인증 API 응답:', verificationResult);
         } catch (apiError) {
           console.error('❌ API 호출 오류:', apiError);
-          // API 호출 실패 시 개발 모드로 처리
-          verificationResult = {
-            verified: true,
-            message: 'API 서버 연결 실패: 개발 모드로 인증 완료',
-            data: {
-              businessNumber: formData.businessNumber.replace(/[^\d]/g, ''),
-              businessName: formData.businessName,
-              representativeName: formData.ownerName,
-              openingDate: openingDateStr,
-              status: '01'
-            }
-          };
-          console.log('🔄 개발 모드로 사업자 인증 처리');
+          // API 호출 실패 시 실제 오류로 처리
+          toast({
+            title: "사업자 인증 서비스 오류",
+            description: "사업자 인증 서비스에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
+            variant: "destructive"
+          });
+          setIsLoading(false);
+          return;
         }
         
         if (!verificationResult.verified) {

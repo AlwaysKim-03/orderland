@@ -27,37 +27,37 @@ function validateBusinessNumber(businessNumber) {
 }
 
 module.exports = async (req, res) => {
-  console.log('=== Vercel API 호출 시작 ===');
-  console.log('요청 메서드:', req.method);
-  console.log('요청 URL:', req.url);
-  console.log('요청 헤더:', req.headers);
-  console.log('요청 바디:', req.body);
-  
-  // 환경변수 디버깅
-  console.log('환경변수 확인:');
-  console.log('- TAX_OFFICE_SERVICE_KEY:', process.env.TAX_OFFICE_SERVICE_KEY ? '설정됨' : '설정되지 않음');
-  console.log('- TAX_OFFICE_API_URL:', process.env.TAX_OFFICE_API_URL || '기본값 사용');
-  console.log('- NODE_ENV:', process.env.NODE_ENV);
-  
-  // CORS 설정
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  // OPTIONS 요청 처리
-  if (req.method === 'OPTIONS') {
-    console.log('OPTIONS 요청 처리');
-    res.status(200).end();
-    return;
-  }
-
-  // POST 요청만 허용
-  if (req.method !== 'POST') {
-    console.log('❌ 잘못된 HTTP 메서드:', req.method);
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
   try {
+    console.log('=== Vercel API 호출 시작 ===');
+    console.log('요청 메서드:', req.method);
+    console.log('요청 URL:', req.url);
+    console.log('요청 헤더:', req.headers);
+    console.log('요청 바디:', req.body);
+    
+    // 환경변수 디버깅
+    console.log('환경변수 확인:');
+    console.log('- TAX_OFFICE_SERVICE_KEY:', process.env.TAX_OFFICE_SERVICE_KEY ? '설정됨' : '설정되지 않음');
+    console.log('- TAX_OFFICE_API_URL:', process.env.TAX_OFFICE_API_URL || '기본값 사용');
+    console.log('- NODE_ENV:', process.env.NODE_ENV);
+    
+    // CORS 설정
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    // OPTIONS 요청 처리
+    if (req.method === 'OPTIONS') {
+      console.log('OPTIONS 요청 처리');
+      res.status(200).end();
+      return;
+    }
+
+    // POST 요청만 허용
+    if (req.method !== 'POST') {
+      console.log('❌ 잘못된 HTTP 메서드:', req.method);
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+
     console.log('✅ POST 요청 처리 시작');
     const { businessNumber, businessName, representativeName, openingDate } = req.body;
     
