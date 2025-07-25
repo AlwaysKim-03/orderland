@@ -201,12 +201,20 @@ const RegisterPage = () => {
   };
 
   const sendEmailVerification = async () => {
+    console.log('=== 이메일 인증 시작 ===');
+    console.log('현재 환경:', import.meta.env.MODE);
+    console.log('개발 모드 여부:', import.meta.env.DEV);
+    console.log('입력된 이메일:', formData.email);
+    console.log('입력된 비밀번호:', formData.password ? '***' : '없음');
+    
     if (!formData.email) {
+      console.log('❌ 이메일이 입력되지 않음');
       setErrors({ email: "이메일을 입력해주세요" });
       return;
     }
     
     if (!formData.password) {
+      console.log('❌ 비밀번호가 입력되지 않음');
       setErrors({ password: "비밀번호를 먼저 입력해주세요" });
       return;
     }
@@ -215,7 +223,7 @@ const RegisterPage = () => {
     try {
       // 개발 모드에서는 이메일 인증 우회
       if (import.meta.env.DEV) {
-        console.log('개발 모드: 이메일 인증 우회');
+        console.log('🟢 개발 모드: 이메일 인증 우회');
         setIsEmailVerified(true);
         toast({
           title: "개발 모드",
@@ -224,8 +232,11 @@ const RegisterPage = () => {
         return;
       }
       
+      console.log('🟡 프로덕션 모드: Firebase 이메일 인증 시도');
+      
       // 프로덕션 모드에서는 실제 Firebase 이메일 인증
       try {
+        console.log('📧 Firebase 계정 생성 시도...');
         // 실제 Firebase 계정 생성 (이메일 인증용)
         const tempUserCredential = await createUserWithEmailAndPassword(
           auth,
@@ -233,18 +244,24 @@ const RegisterPage = () => {
           formData.password
         );
         
+        console.log('✅ Firebase 계정 생성 성공:', tempUserCredential.user.uid);
         const tempUser = tempUserCredential.user;
         
+        console.log('📧 이메일 인증 메일 발송 시도...');
         // 이메일 인증 메일 발송
         await firebaseSendEmailVerification(tempUser, {
           url: window.location.origin + '/login', // 인증 후 리다이렉트 URL
           handleCodeInApp: false
         });
         
+        console.log('✅ 이메일 인증 메일 발송 성공');
+        
         // 임시 사용자 정보를 localStorage에 저장
         localStorage.setItem('tempUserUid', tempUser.uid);
         localStorage.setItem('tempUserEmail', formData.email);
         localStorage.setItem('tempUserPassword', formData.password);
+        
+        console.log('💾 localStorage에 임시 정보 저장 완료');
         
         setIsEmailVerificationSent(true);
         toast({
@@ -252,19 +269,25 @@ const RegisterPage = () => {
           description: "이메일을 확인하여 인증을 완료해주세요. 스팸 메일함도 확인해보세요.",
         });
       } catch (firebaseError: any) {
-        console.error("Firebase 이메일 인증 오류:", firebaseError);
+        console.error("❌ Firebase 이메일 인증 오류:", firebaseError);
+        console.log('오류 코드:', firebaseError.code);
+        console.log('오류 메시지:', firebaseError.message);
         
         // Firebase 오류 시 토큰 기반 인증으로 폴백
-        console.log('Firebase 인증 실패, 토큰 기반 인증으로 폴백');
+        console.log('🔄 Firebase 인증 실패, 토큰 기반 인증으로 폴백');
         const verificationToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        
+        console.log('🔑 생성된 인증 토큰:', verificationToken);
         
         // 임시 인증 정보를 localStorage에 저장
         localStorage.setItem('emailVerificationToken', verificationToken);
         localStorage.setItem('tempUserEmail', formData.email);
         localStorage.setItem('tempUserPassword', formData.password);
         
+        console.log('💾 토큰 기반 인증 정보 저장 완료');
+        
         // 실제 이메일 발송 (여기서는 시뮬레이션)
-        console.log('이메일 인증 토큰:', verificationToken);
+        console.log('📧 토큰 기반 이메일 발송 시뮬레이션');
         
         setIsEmailVerificationSent(true);
         toast({
@@ -273,7 +296,9 @@ const RegisterPage = () => {
         });
       }
     } catch (error: any) {
-      console.error("이메일 인증 발송 오류:", error);
+      console.error("❌ 전체 이메일 인증 발송 오류:", error);
+      console.log('오류 코드:', error.code);
+      console.log('오류 메시지:', error.message);
       
       let errorMessage = "이메일 인증 발송 중 오류가 발생했습니다.";
       
@@ -294,13 +319,18 @@ const RegisterPage = () => {
       });
     } finally {
       setIsLoading(false);
+      console.log('=== 이메일 인증 프로세스 완료 ===');
     }
   };
 
   const checkEmailVerification = async () => {
+    console.log('=== 이메일 인증 확인 시작 ===');
+    console.log('현재 환경:', import.meta.env.MODE);
+    console.log('개발 모드 여부:', import.meta.env.DEV);
+    
     // 개발 모드에서는 인증 상태 확인 우회
     if (import.meta.env.DEV) {
-      console.log('개발 모드: 이메일 인증 상태 확인 우회');
+      console.log('🟢 개발 모드: 이메일 인증 상태 확인 우회');
       setIsEmailVerified(true);
       toast({
         title: "개발 모드",
@@ -309,6 +339,8 @@ const RegisterPage = () => {
       return;
     }
     
+    console.log('🟡 프로덕션 모드: 이메일 인증 상태 확인');
+    
     setIsLoading(true);
     try {
       // 먼저 Firebase 인증 확인 시도
@@ -316,16 +348,27 @@ const RegisterPage = () => {
       const tempUserEmail = localStorage.getItem('tempUserEmail');
       const tempUserPassword = localStorage.getItem('tempUserPassword');
       
+      console.log('📋 localStorage에서 가져온 정보:');
+      console.log('- tempUserUid:', tempUserUid ? '있음' : '없음');
+      console.log('- tempUserEmail:', tempUserEmail);
+      console.log('- tempUserPassword:', tempUserPassword ? '있음' : '없음');
+      
       if (tempUserUid && tempUserEmail && tempUserPassword) {
+        console.log('🔍 Firebase 인증 확인 시도...');
         try {
           // 현재 로그인된 사용자 확인
           const currentUser = auth.currentUser;
+          console.log('현재 로그인된 사용자:', currentUser ? currentUser.uid : '없음');
           
           if (currentUser && currentUser.uid === tempUserUid) {
+            console.log('✅ 현재 사용자와 일치, 이메일 인증 상태 확인...');
             // 이메일 인증 상태 확인
             await currentUser.reload();
             
+            console.log('이메일 인증 상태:', currentUser.emailVerified);
+            
             if (currentUser.emailVerified) {
+              console.log('✅ Firebase 이메일 인증 완료');
               setIsEmailVerified(true);
               
               toast({
@@ -333,8 +376,11 @@ const RegisterPage = () => {
                 description: "이메일 인증이 완료되었습니다.",
               });
               return;
+            } else {
+              console.log('❌ Firebase 이메일 인증 미완료');
             }
           } else {
+            console.log('🔄 임시 사용자로 다시 로그인 시도...');
             // 임시 사용자로 다시 로그인
             const tempUserCredential = await signInWithEmailAndPassword(
               auth,
@@ -343,9 +389,13 @@ const RegisterPage = () => {
             );
             
             const tempUser = tempUserCredential.user;
+            console.log('✅ 임시 사용자 로그인 성공:', tempUser.uid);
             await tempUser.reload();
             
+            console.log('이메일 인증 상태:', tempUser.emailVerified);
+            
             if (tempUser.emailVerified) {
+              console.log('✅ Firebase 이메일 인증 완료');
               setIsEmailVerified(true);
               
               toast({
@@ -353,19 +403,29 @@ const RegisterPage = () => {
                 description: "이메일 인증이 완료되었습니다.",
               });
               return;
+            } else {
+              console.log('❌ Firebase 이메일 인증 미완료');
             }
           }
         } catch (firebaseError) {
-          console.error("Firebase 인증 확인 오류:", firebaseError);
+          console.error("❌ Firebase 인증 확인 오류:", firebaseError);
+          console.log('오류 코드:', firebaseError.code);
+          console.log('오류 메시지:', firebaseError.message);
           // Firebase 인증 실패 시 토큰 기반 인증으로 폴백
         }
       }
       
+      console.log('🔄 토큰 기반 인증 확인 시도...');
       // 토큰 기반 인증 확인
       const verificationToken = localStorage.getItem('emailVerificationToken');
       const tokenUserEmail = localStorage.getItem('tempUserEmail');
       
+      console.log('📋 토큰 기반 인증 정보:');
+      console.log('- verificationToken:', verificationToken ? '있음' : '없음');
+      console.log('- tokenUserEmail:', tokenUserEmail);
+      
       if (!verificationToken || !tokenUserEmail) {
+        console.log('❌ 토큰 기반 인증 정보 부족');
         toast({
           title: "오류",
           description: "인증 정보를 찾을 수 없습니다. 다시 인증 메일을 발송해주세요.",
@@ -375,6 +435,9 @@ const RegisterPage = () => {
       }
       
       if (tokenUserEmail !== formData.email) {
+        console.log('❌ 이메일 주소 불일치');
+        console.log('입력된 이메일:', formData.email);
+        console.log('토큰 이메일:', tokenUserEmail);
         toast({
           title: "오류",
           description: "이메일 주소가 일치하지 않습니다.",
@@ -385,16 +448,19 @@ const RegisterPage = () => {
       
       // 토큰이 있으면 인증 완료로 처리
       if (verificationToken) {
+        console.log('✅ 토큰 기반 인증 완료');
         setIsEmailVerified(true);
         
         // 인증 완료 후 토큰 삭제
         localStorage.removeItem('emailVerificationToken');
+        console.log('🗑️ 인증 토큰 삭제 완료');
         
         toast({
           title: "이메일 인증 완료",
           description: "이메일 인증이 완료되었습니다.",
         });
       } else {
+        console.log('❌ 토큰이 없음');
         toast({
           title: "인증 필요",
           description: "이메일 인증이 완료되지 않았습니다. 이메일을 확인해주세요.",
@@ -402,7 +468,9 @@ const RegisterPage = () => {
         });
       }
     } catch (error: any) {
-      console.error("이메일 인증 확인 오류:", error);
+      console.error("❌ 이메일 인증 확인 오류:", error);
+      console.log('오류 코드:', error.code);
+      console.log('오류 메시지:', error.message);
       
       toast({
         title: "인증 확인 실패",
@@ -411,6 +479,7 @@ const RegisterPage = () => {
       });
     } finally {
       setIsLoading(false);
+      console.log('=== 이메일 인증 확인 프로세스 완료 ===');
     }
   };
 
@@ -454,6 +523,11 @@ const RegisterPage = () => {
   };
 
   const completeRegistration = async () => {
+    console.log('=== 회원가입 완료 시작 ===');
+    console.log('현재 환경:', import.meta.env.MODE);
+    console.log('개발 모드 여부:', import.meta.env.DEV);
+    console.log('이메일 인증 상태:', isEmailVerified);
+    
     const newErrors: Record<string, string> = {};
     
     if (!validateBusinessNumber(formData.businessNumber)) {
@@ -466,8 +540,11 @@ const RegisterPage = () => {
     setErrors(newErrors);
     
     if (Object.keys(newErrors).length === 0) {
+      console.log('✅ 입력값 검증 통과');
+      
       // 이메일 인증 확인
       if (!isEmailVerified && !import.meta.env.DEV) {
+        console.log('❌ 이메일 인증 미완료');
         toast({
           title: "이메일 인증 필요",
           description: "이메일 인증을 완료해주세요.",
@@ -477,6 +554,7 @@ const RegisterPage = () => {
         return;
       }
       
+      console.log('✅ 이메일 인증 확인 통과');
       setIsLoading(true);
       
       try {
@@ -489,6 +567,8 @@ const RegisterPage = () => {
         const apiUrl = window.location.hostname.includes('localhost') 
           ? '/api/business-verification'  // 로컬 개발
           : 'https://store-owner-web.vercel.app/api/business-verification'; // 배포 환경
+        
+        console.log('🔍 사업자 인증 API 호출:', apiUrl);
         
         try {
           const verificationResponse = await fetch(apiUrl, {
@@ -505,8 +585,9 @@ const RegisterPage = () => {
           });
 
           verificationResult = await verificationResponse.json();
+          console.log('✅ 사업자 인증 API 응답:', verificationResult);
         } catch (apiError) {
-          console.error('API 호출 오류:', apiError);
+          console.error('❌ API 호출 오류:', apiError);
           // API 호출 실패 시 개발 모드로 처리
           verificationResult = {
             verified: true,
@@ -519,9 +600,11 @@ const RegisterPage = () => {
               status: '01'
             }
           };
+          console.log('🔄 개발 모드로 사업자 인증 처리');
         }
         
         if (!verificationResult.verified) {
+          console.log('❌ 사업자 인증 실패:', verificationResult.message);
           toast({
             title: "사업자 인증 실패",
             description: verificationResult.message || "사업자 정보 인증에 실패했습니다.",
@@ -531,9 +614,12 @@ const RegisterPage = () => {
           return;
         }
 
+        console.log('✅ 사업자 인증 성공');
+
         // 실제 Firebase 계정 생성 (회원가입 완료 시점)
         let userCredential;
         if (import.meta.env.DEV) {
+          console.log('🟢 개발 모드: 임시 사용자 정보 생성');
           // 개발 모드에서는 임시 사용자 정보로 처리
           userCredential = {
             user: {
@@ -543,20 +629,30 @@ const RegisterPage = () => {
             }
           };
         } else {
+          console.log('🟡 프로덕션 모드: Firebase 계정 처리');
           // 프로덕션 모드에서는 기존 Firebase 계정 사용
           const tempUserUid = localStorage.getItem('tempUserUid');
           const tempUserEmail = localStorage.getItem('tempUserEmail');
           const tempUserPassword = localStorage.getItem('tempUserPassword');
           
+          console.log('📋 기존 계정 정보:');
+          console.log('- tempUserUid:', tempUserUid ? '있음' : '없음');
+          console.log('- tempUserEmail:', tempUserEmail);
+          console.log('- tempUserPassword:', tempUserPassword ? '있음' : '없음');
+          
           if (tempUserUid && tempUserEmail && tempUserPassword) {
+            console.log('🔄 기존 임시 계정 사용 시도...');
             // 기존 임시 계정 사용
             try {
               // 이미 로그인된 상태인지 확인
               const currentUser = auth.currentUser;
+              console.log('현재 로그인된 사용자:', currentUser ? currentUser.uid : '없음');
               
               if (currentUser && currentUser.uid === tempUserUid) {
+                console.log('✅ 기존 사용자 계정 사용');
                 userCredential = { user: currentUser };
               } else {
+                console.log('🔄 임시 계정으로 다시 로그인 시도...');
                 // 임시 계정으로 다시 로그인
                 const tempUserCredential = await signInWithEmailAndPassword(
                   auth,
@@ -564,39 +660,50 @@ const RegisterPage = () => {
                   tempUserPassword
                 );
                 userCredential = tempUserCredential;
+                console.log('✅ 임시 계정 로그인 성공');
               }
             } catch (error) {
-              console.error('기존 계정 로그인 실패:', error);
+              console.error('❌ 기존 계정 로그인 실패:', error);
+              console.log('🔄 새 계정 생성 시도...');
               // 새 계정 생성
               userCredential = await createUserWithEmailAndPassword(
                 auth,
                 tempUserEmail,
                 tempUserPassword
               );
+              console.log('✅ 새 계정 생성 성공');
             }
           } else {
+            console.log('🔄 임시 정보 없음, 새 계정 생성 시도...');
             // 임시 정보가 없으면 새 계정 생성
             userCredential = await createUserWithEmailAndPassword(
               auth,
               formData.email,
               formData.password
             );
+            console.log('✅ 새 계정 생성 성공');
           }
           
+          console.log('🗑️ 임시 정보 삭제...');
           // 임시 정보 삭제
           localStorage.removeItem('tempUserUid');
           localStorage.removeItem('tempUserEmail');
           localStorage.removeItem('tempUserPassword');
           localStorage.removeItem('emailVerificationToken');
+          console.log('✅ 임시 정보 삭제 완료');
         }
 
         const user = userCredential.user;
+        console.log('👤 최종 사용자 정보:', user.uid);
 
+        console.log('📝 사용자 프로필 업데이트...');
         // 사용자 프로필 업데이트
         await updateProfile(user, {
           displayName: formData.name
         });
+        console.log('✅ 프로필 업데이트 완료');
 
+        console.log('💾 Firestore에 사용자 정보 저장...');
         // Firestore에 사용자 정보 저장 (사업자 인증 정보 포함)
         await setDoc(doc(db, "users", user.uid), {
           businessName: formData.businessName,
@@ -614,7 +721,9 @@ const RegisterPage = () => {
           businessVerified: true,
           businessVerificationData: verificationResult.data
         });
+        console.log('✅ Firestore 사용자 정보 저장 완료');
 
+        console.log('⚙️ 기본 설정 데이터 생성...');
         // 기본 설정 데이터 생성
         await setDoc(doc(db, "settings", "store"), {
           storeName: formData.storeName,
@@ -648,7 +757,9 @@ const RegisterPage = () => {
           },
           updatedAt: new Date()
         });
+        console.log('✅ 기본 설정 데이터 생성 완료');
 
+        console.log('🎉 회원가입 완료!');
         toast({
           title: "회원가입이 완료되었습니다! 🎉",
           description: "관리자 대시보드로 이동합니다.",
@@ -659,9 +770,12 @@ const RegisterPage = () => {
         localStorage.removeItem('tempUserUid');
         localStorage.removeItem('tempUserEmail');
         
+        console.log('🔄 관리자 페이지로 이동...');
         navigate("/admin");
       } catch (error: any) {
-        console.error("회원가입 오류:", error);
+        console.error("❌ 회원가입 오류:", error);
+        console.log('오류 코드:', error.code);
+        console.log('오류 메시지:', error.message);
         
         let errorMessage = "회원가입 중 오류가 발생했습니다.";
         
@@ -680,7 +794,10 @@ const RegisterPage = () => {
         });
       } finally {
         setIsLoading(false);
+        console.log('=== 회원가입 완료 프로세스 종료 ===');
       }
+    } else {
+      console.log('❌ 입력값 검증 실패:', newErrors);
     }
   };
 
