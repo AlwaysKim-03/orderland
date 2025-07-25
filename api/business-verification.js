@@ -1,7 +1,7 @@
 // 국세청 API 설정
 const TAX_OFFICE_CONFIG = {
   baseURL: process.env.TAX_OFFICE_API_URL || "https://api.odcloud.kr/api/nts-businessman/v1",
-  serviceKey: process.env.NTS_API_KEY || "", // 실제 설정된 환경변수 이름
+  serviceKey: process.env.NTS_API_KEY ? decodeURIComponent(process.env.NTS_API_KEY) : "", // URL 디코딩 추가
   apiKey: process.env.TAX_OFFICE_API_KEY || ""
 };
 
@@ -34,8 +34,12 @@ module.exports = async (req, res) => {
     
     // 환경변수 디버깅
     console.log('환경변수 확인:');
-    console.log('- NTS_API_KEY:', process.env.NTS_API_KEY ? '설정됨' : '설정되지 않음'); // 환경변수 이름 변경
-    console.log('- NTS_API_KEY 길이:', process.env.NTS_API_KEY ? process.env.NTS_API_KEY.length : 0);
+    console.log('- NTS_API_KEY (원본):', process.env.NTS_API_KEY ? '설정됨' : '설정되지 않음');
+    console.log('- NTS_API_KEY (원본 길이):', process.env.NTS_API_KEY ? process.env.NTS_API_KEY.length : 0);
+    console.log('- NTS_API_KEY (디코딩):', process.env.NTS_API_KEY ? decodeURIComponent(process.env.NTS_API_KEY) : '없음');
+    console.log('- NTS_API_KEY (디코딩 길이):', process.env.NTS_API_KEY ? decodeURIComponent(process.env.NTS_API_KEY).length : 0);
+    console.log('- TAX_OFFICE_CONFIG.serviceKey:', TAX_OFFICE_CONFIG.serviceKey ? '설정됨' : '설정되지 않음');
+    console.log('- TAX_OFFICE_CONFIG.serviceKey 길이:', TAX_OFFICE_CONFIG.serviceKey ? TAX_OFFICE_CONFIG.serviceKey.length : 0);
     console.log('- TAX_OFFICE_API_URL:', process.env.TAX_OFFICE_API_URL || '기본값 사용');
     console.log('- NODE_ENV:', process.env.NODE_ENV);
     
