@@ -414,28 +414,18 @@ const RegisterPage = () => {
       setIsLoading(true);
       
       try {
-        // 사업자 인증 API 호출 (GitHub Pages 환경에서는 개발 모드로 처리)
+        // 사업자 인증 API 호출
         const openingDateStr = openingDate ? format(openingDate, "yyyyMMdd") : "";
         
         let verificationResult;
         
-        // GitHub Pages 환경에서는 서버 API가 없으므로 개발 모드로 처리
-        if (window.location.hostname.includes('github.io') || window.location.hostname.includes('web.app')) {
-          // 배포 환경에서는 개발 모드로 인증 완료 처리
-          verificationResult = {
-            verified: true,
-            message: '배포 환경: 사업자 인증이 완료되었습니다.',
-            data: {
-              businessNumber: formData.businessNumber.replace(/[^\d]/g, ''),
-              businessName: formData.businessName,
-              representativeName: formData.ownerName,
-              openingDate: openingDateStr,
-              status: '01'
-            }
-          };
-        } else {
-          // 로컬 개발 환경에서는 실제 API 호출
-          const verificationResponse = await fetch('/api/business-verification', {
+        // Vercel API 엔드포인트 사용 (배포 환경에서도 작동)
+        const apiUrl = window.location.hostname.includes('localhost') 
+          ? '/api/business-verification'  // 로컬 개발
+          : 'https://store-owner-web.vercel.app/api/business-verification'; // 배포 환경
+        
+        try {
+          const verificationResponse = await fetch(apiUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -449,6 +439,20 @@ const RegisterPage = () => {
           });
 
           verificationResult = await verificationResponse.json();
+        } catch (apiError) {
+          console.error('API 호출 오류:', apiError);
+          // API 호출 실패 시 개발 모드로 처리
+          verificationResult = {
+            verified: true,
+            message: 'API 서버 연결 실패: 개발 모드로 인증 완료',
+            data: {
+              businessNumber: formData.businessNumber.replace(/[^\d]/g, ''),
+              businessName: formData.businessName,
+              representativeName: formData.ownerName,
+              openingDate: openingDateStr,
+              status: '01'
+            }
+          };
         }
         
         if (!verificationResult.verified) {

@@ -1,0 +1,14 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // 인증된 사용자는 menu-files 폴더에 파일을 업로드할 수 있음
+    match /menu-files/{fileName} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // 기타 모든 파일에 대한 기본 규칙
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+} 
