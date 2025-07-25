@@ -1,5 +1,3 @@
-const axios = require('axios');
-
 // 국세청 API 설정
 const TAX_OFFICE_CONFIG = {
   baseURL: process.env.TAX_OFFICE_API_URL || "https://api.odcloud.kr/api/nts-businessman/v1",
@@ -100,21 +98,31 @@ module.exports = async (req, res) => {
           b_no: businessNumber
         });
         
-        const response = await axios.get(`${TAX_OFFICE_CONFIG.baseURL}/status`, {
-          params: {
-            serviceKey: TAX_OFFICE_CONFIG.serviceKey,
-            b_no: businessNumber
-          },
-          timeout: 10000
+        // URL 파라미터 구성
+        const url = new URL(`${TAX_OFFICE_CONFIG.baseURL}/status`);
+        url.searchParams.append('serviceKey', TAX_OFFICE_CONFIG.serviceKey);
+        url.searchParams.append('b_no', businessNumber);
+        
+        const response = await fetch(url.toString(), {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
         });
 
         console.log('✅ 국세청 API 응답 성공');
         console.log('응답 상태:', response.status);
-        console.log('응답 데이터:', response.data);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const responseData = await response.json();
+        console.log('응답 데이터:', responseData);
 
         // API 응답에 따른 검증 결과 반환
-        if (response.data && response.data.data) {
-          const businessData = response.data.data[0];
+        if (responseData && responseData.data) {
+          const businessData = responseData.data[0];
           console.log('비즈니스 데이터:', businessData);
           
           if (businessData.b_stt === '01') { // 정상
@@ -163,9 +171,7 @@ module.exports = async (req, res) => {
         }
       } catch (apiError) {
         console.error('❌ 국세청 API 호출 오류:', apiError);
-        console.log('오류 코드:', apiError.code);
         console.log('오류 메시지:', apiError.message);
-        console.log('오류 응답:', apiError.response?.data);
         
         return res.status(500).json({
           verified: false,
