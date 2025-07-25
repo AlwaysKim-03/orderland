@@ -1,7 +1,7 @@
 // 국세청 API 설정
 const TAX_OFFICE_CONFIG = {
   baseURL: process.env.TAX_OFFICE_API_URL || "https://api.odcloud.kr/api/nts-businessman/v1",
-  serviceKey: process.env.TAX_OFFICE_SERVICE_KEY || "",
+  serviceKey: process.env.NTS_API_KEY || "", // 실제 설정된 환경변수 이름
   apiKey: process.env.TAX_OFFICE_API_KEY || ""
 };
 
