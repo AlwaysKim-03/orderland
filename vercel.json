@@ -6,12 +6,6 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/business-verification.js": {
-      "runtime": "@vercel/node@3.0.0"
-    },
-    "api/business-verification-status.js": {
-      "runtime": "@vercel/node@3.0.0"
-    },
     "api/user.js": {
       "runtime": "@vercel/node@3.0.0"
     },

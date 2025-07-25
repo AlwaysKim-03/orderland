@@ -528,59 +528,6 @@ const RegisterPage = () => {
       setIsLoading(true);
       
       try {
-        // 사업자 인증 API 호출
-        const openingDateStr = openingDate ? format(openingDate, "yyyyMMdd") : "";
-        
-        let verificationResult;
-        
-        // Vercel API 엔드포인트 사용 (배포 환경에서도 작동)
-        const apiUrl = window.location.hostname.includes('localhost') 
-          ? '/api/business-verification'  // 로컬 개발
-          : 'https://store-owner-web.vercel.app/api/business-verification'; // 배포 환경
-        
-        console.log('🔍 사업자 인증 API 호출:', apiUrl);
-        
-        try {
-          const verificationResponse = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              businessNumber: formData.businessNumber.replace(/[^\d]/g, ''),
-              openingDate: openingDateStr,
-              representativeName: formData.ownerName,
-              businessName: formData.businessName
-            })
-          });
-
-          verificationResult = await verificationResponse.json();
-          console.log('✅ 사업자 인증 API 응답:', verificationResult);
-        } catch (apiError) {
-          console.error('❌ API 호출 오류:', apiError);
-          // API 호출 실패 시 실제 오류로 처리
-          toast({
-            title: "사업자 인증 서비스 오류",
-            description: "사업자 인증 서비스에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
-            variant: "destructive"
-          });
-          setIsLoading(false);
-          return;
-        }
-        
-        if (!verificationResult.verified) {
-          console.log('❌ 사업자 인증 실패:', verificationResult.message);
-          toast({
-            title: "사업자 인증 실패",
-            description: verificationResult.message || "사업자 정보 인증에 실패했습니다.",
-            variant: "destructive"
-          });
-          setIsLoading(false);
-          return;
-        }
-
-        console.log('✅ 사업자 인증 성공');
-
         // 모든 인증이 완료된 후 Firebase 계정 생성
         let userCredential;
         console.log('🟡 Firebase 계정 생성 시작');
@@ -628,8 +575,9 @@ const RegisterPage = () => {
         console.log('💾 Firestore에 사용자 정보 저장...');
         // Firestore에 사용자 정보 저장 (사업자 인증 정보 포함)
         await setDoc(doc(db, "users", user.uid), {
+          uid: user.uid,
+          businessNumber: formData.businessNumber.replace(/[^\d]/g, ''),
           businessName: formData.businessName,
-          businessNumber: formData.businessNumber,
           ownerName: formData.ownerName,
           email: formData.email,
           phoneNumber: formData.phone,
@@ -640,8 +588,8 @@ const RegisterPage = () => {
           openingDate: openingDate,
           emailVerified: true,
           phoneVerified: true,
-          businessVerified: true,
-          businessVerificationData: verificationResult.data
+          businessVerified: false,
+          businessVerificationData: null
         });
         console.log('✅ Firestore 사용자 정보 저장 완료');
 
