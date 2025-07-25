@@ -134,6 +134,9 @@ const RegisterPage = () => {
   };
 
   const verifyPhone = async () => {
+    console.log('=== 전화번호 인증 확인 시작 ===');
+    console.log('입력된 인증 코드:', phoneVerificationCode);
+    
     if (!phoneVerificationCode || phoneVerificationCode.length !== 6) {
       setErrors({ verificationCode: "6자리 인증번호를 입력해주세요" });
       return;
@@ -150,11 +153,23 @@ const RegisterPage = () => {
     
     setIsLoading(true);
     try {
+      console.log('🔄 전화번호 인증 코드 확인 시도...');
+      
       // 인증 코드 확인 (Firebase 인증은 하지 않고 인증만 확인)
       const result = await confirmationResult.confirm(phoneVerificationCode);
       
       // 인증이 성공적으로 완료되었는지 확인
       if (result.user) {
+        console.log('✅ 전화번호 인증 성공');
+        
+        // 전화번호 인증 정보를 localStorage에 저장 (Firebase 계정 생성 연기)
+        localStorage.setItem('phoneVerificationToken', Math.random().toString(36).substring(2, 15));
+        localStorage.setItem('tempUserPhone', formData.phone);
+        localStorage.setItem('tempUserName', formData.name);
+        localStorage.setItem('phoneVerificationTime', Date.now().toString());
+        
+        console.log('💾 전화번호 인증 정보 저장 완료');
+        
         setIsPhoneVerified(true);
         setCurrentStep(2);
         toast({
@@ -178,7 +193,9 @@ const RegisterPage = () => {
         throw new Error("인증에 실패했습니다.");
       }
     } catch (error: any) {
-      console.error("인증 코드 확인 오류:", error);
+      console.error("❌ 인증 코드 확인 오류:", error);
+      console.log('오류 코드:', error.code);
+      console.log('오류 메시지:', error.message);
       
       let errorMessage = "인증번호가 올바르지 않습니다.";
       
@@ -197,6 +214,7 @@ const RegisterPage = () => {
       });
     } finally {
       setIsLoading(false);
+      console.log('=== 전화번호 인증 확인 프로세스 완료 ===');
     }
   };
 
@@ -440,6 +458,7 @@ const RegisterPage = () => {
     console.log('=== 회원가입 완료 시작 ===');
     console.log('현재 환경:', import.meta.env.MODE);
     console.log('개발 모드 여부:', import.meta.env.DEV);
+    console.log('전화번호 인증 상태:', isPhoneVerified);
     console.log('이메일 인증 상태:', isEmailVerified);
     
     const newErrors: Record<string, string> = {};
@@ -456,8 +475,43 @@ const RegisterPage = () => {
     if (Object.keys(newErrors).length === 0) {
       console.log('✅ 입력값 검증 통과');
       
-      // 이메일 인증 확인 (임시로 개발 모드 우회 비활성화)
-      // if (!isEmailVerified && !import.meta.env.DEV) {
+      // 전화번호 인증 확인
+      const phoneVerificationToken = localStorage.getItem('phoneVerificationToken');
+      const tempUserPhone = localStorage.getItem('tempUserPhone');
+      const tempUserName = localStorage.getItem('tempUserName');
+      
+      console.log('📋 전화번호 인증 정보:');
+      console.log('- phoneVerificationToken:', phoneVerificationToken ? '있음' : '없음');
+      console.log('- tempUserPhone:', tempUserPhone);
+      console.log('- tempUserName:', tempUserName);
+      
+      if (!phoneVerificationToken || !tempUserPhone || !tempUserName) {
+        console.log('❌ 전화번호 인증 정보 부족');
+        toast({
+          title: "전화번호 인증 필요",
+          description: "전화번호 인증을 먼저 완료해주세요.",
+          variant: "destructive"
+        });
+        setCurrentStep(1);
+        setIsLoading(false);
+        return;
+      }
+      
+      if (tempUserPhone !== formData.phone || tempUserName !== formData.name) {
+        console.log('❌ 전화번호 또는 이름 불일치');
+        toast({
+          title: "인증 정보 불일치",
+          description: "전화번호 또는 이름이 일치하지 않습니다.",
+          variant: "destructive"
+        });
+        setCurrentStep(1);
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log('✅ 전화번호 인증 확인 통과');
+      
+      // 이메일 인증 확인
       if (!isEmailVerified) {
         console.log('❌ 이메일 인증 미완료');
         toast({
@@ -465,6 +519,7 @@ const RegisterPage = () => {
           description: "이메일 인증을 완료해주세요.",
           variant: "destructive"
         });
+        setCurrentStep(2);
         setIsLoading(false);
         return;
       }
@@ -526,7 +581,7 @@ const RegisterPage = () => {
 
         console.log('✅ 사업자 인증 성공');
 
-        // 실제 Firebase 계정 생성 (회원가입 완료 시점)
+        // 모든 인증이 완료된 후 Firebase 계정 생성
         let userCredential;
         console.log('🟡 Firebase 계정 생성 시작');
         
@@ -559,7 +614,7 @@ const RegisterPage = () => {
           setIsLoading(false);
           return;
         }
-
+        
         const user = userCredential.user;
         console.log('👤 최종 사용자 정보:', user.uid);
 
@@ -634,6 +689,10 @@ const RegisterPage = () => {
         localStorage.removeItem('emailVerificationToken');
         localStorage.removeItem('emailVerificationCode');
         localStorage.removeItem('emailVerificationTime');
+        localStorage.removeItem('phoneVerificationToken');
+        localStorage.removeItem('tempUserPhone');
+        localStorage.removeItem('tempUserName');
+        localStorage.removeItem('phoneVerificationTime');
         console.log('✅ 임시 정보 삭제 완료');
 
         console.log('🎉 회원가입 완료!');
@@ -644,8 +703,6 @@ const RegisterPage = () => {
         
         // 회원가입 완료 시 localStorage 정리
         localStorage.removeItem('isRegistering');
-        localStorage.removeItem('tempUserUid');
-        localStorage.removeItem('tempUserEmail');
         
         console.log('🔄 관리자 페이지로 이동...');
         navigate("/admin");
