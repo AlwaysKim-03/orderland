@@ -1,39 +1,7 @@
 {
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/" }
-  ],
+  "version": 2,
+  "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "functions": {
-    "api/user.js": {
-      "runtime": "@vercel/node@3.0.0"
-    },
-    "api/orders.js": {
-      "runtime": "@vercel/node@3.0.0"
-    },
-    "api/call_request.js": {
-      "runtime": "@vercel/node@3.0.0"
-    }
-  },
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=0, must-revalidate"
-        }
-      ]
-    },
-    {
-      "source": "/assets/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    }
-  ]
-} 
+  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
+}
