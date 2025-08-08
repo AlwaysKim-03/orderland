@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 사용자 인증 확인 함수
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // 모든 컬렉션에 대한 기본 규칙 - 인증된 사용자는 읽기/쓰기 가능
+    match /{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // 특정 컬렉션별 세부 규칙 (필요시)
+    match /settings/{settingId} {
+      allow read, write: if true;  // 회원가입을 위해 임시로 모든 권한 허용
+    }
+    
+    match /menus/{menuId} {
+      allow read: if true;  // 임시로 인증 없이 읽기 허용
+      allow write: if isAuthenticated();
+    }
+    
+    match /categories/{categoryId} {
+      allow read: if true;  // 임시로 인증 없이 읽기 허용
+      allow write: if isAuthenticated();
+    }
+    
+    match /tables/{tableId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /orders/{orderId} {
+      allow read: if true;  // 임시로 인증 없이 읽기 허용
+      allow write: if isAuthenticated();
+    }
+    
+    match /reservations/{reservationId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    // users 컬렉션 - 아이디 찾기 기능을 위해 읽기 허용, 회원가입을 위해 쓰기 허용
+    match /users/{userId} {
+      allow read: if true;  // 인증 없이 읽기 허용 (아이디 찾기용)
+      allow write: if true;  // 회원가입을 위해 쓰기 허용 (임시)
+    }
+    
+    match /products/{productId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /staffCalls/{callId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /staff_calls/{callId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /sales_summary/{summaryId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /_test/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+} 

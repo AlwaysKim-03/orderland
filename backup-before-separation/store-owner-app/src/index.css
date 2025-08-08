@@ -1,0 +1,179 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* OrderLand Korean Restaurant Management App Design System */
+
+@layer base {
+  :root {
+    /* Main Brand Colors - Warm Korean Restaurant Theme */
+    --background: 32 100% 98%;
+    --foreground: 15 8% 25%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 15 8% 25%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 15 8% 25%;
+
+    /* Primary: Warm Korean Orange */
+    --primary: 15 85% 58%;
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 15 85% 68%;
+    --primary-glow: 15 90% 75%;
+
+    /* Secondary: Soft Peach */
+    --secondary: 25 60% 94%;
+    --secondary-foreground: 15 8% 25%;
+
+    /* Muted: Light Warm Gray */
+    --muted: 25 20% 96%;
+    --muted-foreground: 15 5% 55%;
+
+    /* Accent: Warm Coral */
+    --accent: 12 75% 65%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Success: Fresh Green for completed orders */
+    --success: 142 70% 50%;
+    --success-foreground: 0 0% 100%;
+    --success-light: 142 50% 90%;
+
+    /* Warning: Golden Yellow for pending states */
+    --warning: 45 90% 55%;
+    --warning-foreground: 15 8% 25%;
+    --warning-light: 45 80% 92%;
+
+    /* Destructive: Soft Red */
+    --destructive: 0 70% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Border & Input */
+    --border: 25 30% 90%;
+    --input: 25 30% 92%;
+    --ring: 15 85% 58%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "kern" 1, "liga" 1;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Korean-friendly typography and mobile optimizations */
+  .mobile-title {
+    @apply text-xl font-bold tracking-tight;
+  }
+  
+  .mobile-subtitle {
+    @apply text-lg font-semibold;
+  }
+  
+  .mobile-body {
+    @apply text-base leading-relaxed;
+  }
+  
+  .mobile-caption {
+    @apply text-sm text-muted-foreground;
+  }
+
+  /* Custom animations for OrderLand */
+  .bounce-gentle {
+    animation: bounce-gentle 0.3s ease-out;
+  }
+
+  @keyframes bounce-gentle {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+
+  /* Gradients for Korean restaurant theme */
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-light)));
+  }
+  
+  .gradient-warm {
+    background: linear-gradient(135deg, hsl(var(--primary-glow)), hsl(var(--accent)));
+  }
+  
+  .gradient-success {
+    background: linear-gradient(135deg, hsl(var(--success)), hsl(var(--success-light)));
+  }
+
+  /* Table status indicators */
+  .table-status-empty {
+    @apply bg-muted border-2 border-dashed border-border;
+  }
+  
+  .table-status-occupied {
+    @apply bg-warning-light border-2 border-warning;
+  }
+  
+  .table-status-served {
+    @apply bg-success-light border-2 border-success;
+  }
+}

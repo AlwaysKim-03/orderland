@@ -1,59 +1,158 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Store, ArrowLeft, Mail, Lock, Search, Phone, Building } from "lucide-react";
+import { Store, Mail, Lock, AlertCircle, Phone, Shield, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase';
-import { findIdByPhone, findPasswordByEmailAndPhone, validatePhoneNumber, validateEmail } from '../utils/findAccount';
+import { FindAccountModal } from "@/components/auth/FindAccountModal";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, setDoc, getDoc } from "firebase/firestore";
+import { auth, db } from "../firebase";
+import { signOut } from "firebase/auth";
+
+// 관리자 계정 정보
+const ADMIN_CREDENTIALS = {
+  email: "gksruf8983",
+  password: "KimHan*9*3"
+};
+
+// 테스트용 인증번호
+const TEST_VERIFICATION_CODE = "123456";
 
 const LoginPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  
+  // 손님용 페이지에서는 항상 라이트 모드 사용
+  useEffect(() => {
+    // 다크모드 클래스 제거하여 라이트 모드 강제 적용
+    document.documentElement.classList.remove('dark');
+    document.documentElement.classList.add('light');
+  }, []);
+  
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [loginError, setLoginError] = useState("");
+  const [findAccountModalOpen, setFindAccountModalOpen] = useState(false);
+  const [showAdminAuth, setShowAdminAuth] = useState(false);
+  const [adminAuthData, setAdminAuthData] = useState({
+    phoneNumber: "",
+    verificationCode: ""
+  });
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [verificationError, setVerificationError] = useState("");
   const [formData, setFormData] = useState({
     email: "",
     password: ""
   });
-
-  // Find ID/Password 관련 상태
-  const [findAccountType, setFindAccountType] = useState<'id' | 'password'>('id');
-  const [findAccountData, setFindAccountData] = useState({
-    phone: '',
-    email: '',
-    businessNumber: ''
-  });
-  const [isFindingAccount, setIsFindingAccount] = useState(false);
-  const [findAccountResult, setFindAccountResult] = useState<{
-    success: boolean;
-    message: string;
-    email?: string;
-  } | null>(null);
-  const [isFindAccountDialogOpen, setIsFindAccountDialogOpen] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({
       ...prev,
       [e.target.name]: e.target.value
     }));
+    // Clear error when user types
+    if (loginError) setLoginError("");
+  };
+
+  const handleAdminAuthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setAdminAuthData(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }));
+    if (verificationError) setVerificationError("");
   };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setError('');
+    setLoginError("");
 
     try {
-      await signInWithEmailAndPassword(auth, formData.email, formData.password);
+      // 관리자 계정 확인
+      if (formData.email === ADMIN_CREDENTIALS.email && formData.password === ADMIN_CREDENTIALS.password) {
+        // 관리자 계정이면 2차 인증 폼 표시 (Firebase 인증 없이)
+        setShowAdminAuth(true);
+        toast({
+          title: "관리자 인증 필요",
+          description: "핸드폰 본인인증을 진행해주세요.",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // 일반 로그인 처리 - 관리자 계정이 아닌 경우에만 이메일 형식 검증
+      if (formData.email !== ADMIN_CREDENTIALS.email) {
+        // 일반 사용자는 이메일 형식이어야 함
+        if (!formData.email.includes('@')) {
+          setLoginError('올바르지 않은 이메일 형식입니다.');
+          toast({
+            title: "로그인 실패",
+            description: '올바르지 않은 이메일 형식입니다.',
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // 일반 사용자만 Firebase 인증 시도
+      const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+      const user = userCredential.user;
+
+      // 사용자 승인 상태 확인
+      try {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          
+          // 계정 활성 상태 확인 (가장 먼저 확인)
+          if (!userData.isActive) {
+            await signOut(auth); // 로그아웃
+            setLoginError('계정이 비활성화되었습니다. 관리자에게 문의하세요.');
+            toast({
+              title: "로그인 불가",
+              description: "계정이 비활성화되었습니다. 관리자에게 문의하세요.",
+              variant: "destructive",
+            });
+            setIsLoading(false);
+            return;
+          }
+          
+          // 승인 상태 확인
+          if (userData.approvalStatus === 'pending') {
+            await signOut(auth); // 로그아웃
+            setLoginError('사업자등록 승인 대기 중입니다. 승인 후 로그인 가능합니다.');
+            toast({
+              title: "로그인 불가",
+              description: "사업자등록 승인 대기 중입니다. 승인 후 다시 시도해주세요.",
+              variant: "destructive",
+            });
+            setIsLoading(false);
+            return;
+          }
+          
+          if (userData.approvalStatus === 'rejected') {
+            await signOut(auth); // 로그아웃
+            setLoginError('사업자등록이 거절되었습니다. 관리자에게 문의하세요.');
+            toast({
+              title: "로그인 불가",
+              description: "사업자등록이 거절되었습니다. 관리자에게 문의하세요.",
+              variant: "destructive",
+            });
+            setIsLoading(false);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('사용자 정보 확인 오류:', error);
+        // 사용자 정보 확인에 실패해도 로그인은 허용 (기존 사용자 보호)
+      }
+
       toast({
-        title: "로그인 성공! 🎉",
+        title: "로그인 성공!",
         description: "관리자 대시보드로 이동합니다.",
       });
       navigate("/admin");
@@ -67,9 +166,11 @@ const LoginPage = () => {
         errorMessage = '비밀번호가 올바르지 않습니다.';
       } else if (error.code === 'auth/invalid-email') {
         errorMessage = '올바르지 않은 이메일 형식입니다.';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = '너무 많은 로그인 시도가 있었습니다. 잠시 후 다시 시도해주세요.';
       }
       
-      setError(errorMessage);
+      setLoginError(errorMessage);
       toast({
         title: "로그인 실패",
         description: errorMessage,
@@ -80,437 +181,261 @@ const LoginPage = () => {
     }
   };
 
-  const handleSocialLogin = (provider: string) => {
+  const handleSendVerification = () => {
+    if (!adminAuthData.phoneNumber) {
+      setVerificationError("핸드폰 번호를 입력해주세요.");
+      return;
+    }
+    
+    setVerificationSent(true);
     toast({
-      title: `${provider} 로그인`,
-      description: "소셜 로그인 기능은 준비 중입니다.",
+      title: "인증번호 발송",
+      description: `인증번호 ${TEST_VERIFICATION_CODE}가 발송되었습니다.`,
     });
   };
 
-  // Find ID/Password 핸들러 함수들
-  const handleFindAccountInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFindAccountData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.value
-    }));
-  };
-
-  const handleFindId = async () => {
-    if (!findAccountData.phone) {
-      toast({
-        title: "전화번호를 입력해주세요",
-        description: "등록된 전화번호를 입력해주세요.",
-        variant: "destructive",
-      });
+  const handleVerifyCode = async () => {
+    if (!adminAuthData.verificationCode) {
+      setVerificationError("인증번호를 입력해주세요.");
       return;
     }
 
-    if (!validatePhoneNumber(findAccountData.phone)) {
-      toast({
-        title: "올바른 전화번호 형식이 아닙니다",
-        description: "000-0000-0000 형식으로 입력해주세요.",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (adminAuthData.verificationCode === TEST_VERIFICATION_CODE) {
+      // 인증 성공 - 최고 관리자 권한 부여
+      try {
+        console.log('관리자 인증 성공 - 세션 저장 시작');
+        
+        // Firestore에 관리자 세션 정보 저장 (선택적)
+        const adminSessionData = {
+          role: 'super-admin',
+          email: ADMIN_CREDENTIALS.email,
+          phoneNumber: adminAuthData.phoneNumber,
+          verifiedAt: new Date().toISOString(), // 인증 시간 저장
+          expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), // 2시간 후 만료
+          isActive: true
+        };
 
-    setIsFindingAccount(true);
-    setFindAccountResult(null);
+        console.log('관리자 세션 데이터:', adminSessionData);
 
-    try {
-      const result = await findIdByPhone(findAccountData.phone);
-      setFindAccountResult(result);
-      
-      if (result.success) {
+        // Firestore에 관리자 세션 저장 (오류가 발생해도 계속 진행)
+        try {
+          await setDoc(doc(db, 'adminSessions', 'current'), adminSessionData);
+          console.log('Firestore 저장 성공');
+        } catch (firestoreError) {
+          console.log('Firestore 저장 실패 (계속 진행):', firestoreError);
+        }
+
+        // 로컬 스토리지에 관리자 세션 정보 저장
+        const localSessionData = {
+          ...adminSessionData,
+          verifiedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+        };
+        
+        localStorage.setItem('orderland-admin-session', JSON.stringify(localSessionData));
+        console.log('로컬 스토리지 저장 완료:', localSessionData);
+
         toast({
-          title: "계정을 찾았습니다",
-          description: result.message,
+          title: "인증 성공!",
+          description: "최고 관리자 페이지로 이동합니다.",
         });
-      } else {
-        toast({
-          title: "계정을 찾을 수 없습니다",
-          description: result.message,
-          variant: "destructive",
-        });
+        
+        console.log('관리자 페이지로 이동 시작');
+        // 최고 관리자 페이지로 이동
+        navigate("/super-admin");
+      } catch (error) {
+        console.error('Admin auth error:', error);
+        setVerificationError("인증 처리 중 오류가 발생했습니다.");
       }
-    } catch (error) {
-      console.error('ID 찾기 오류:', error);
-      toast({
-        title: "오류가 발생했습니다",
-        description: "계정 찾기 중 오류가 발생했습니다.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsFindingAccount(false);
+    } else {
+      setVerificationError("인증오류: 인증번호가 올바르지 않습니다.");
     }
   };
 
-  const handleFindPassword = async () => {
-    if (!findAccountData.email || !findAccountData.phone) {
-      toast({
-        title: "정보를 모두 입력해주세요",
-        description: "이메일과 전화번호를 모두 입력해주세요.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!validateEmail(findAccountData.email)) {
-      toast({
-        title: "올바른 이메일 형식이 아닙니다",
-        description: "올바른 이메일 주소를 입력해주세요.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!validatePhoneNumber(findAccountData.phone)) {
-      toast({
-        title: "올바른 전화번호 형식이 아닙니다",
-        description: "000-0000-0000 형식으로 입력해주세요.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsFindingAccount(true);
-    setFindAccountResult(null);
-
-    try {
-      const result = await findPasswordByEmailAndPhone(findAccountData.email, findAccountData.phone);
-      setFindAccountResult(result);
-      
-      if (result.success) {
-        toast({
-          title: "비밀번호 재설정 이메일 발송",
-          description: result.message,
-        });
-      } else {
-        toast({
-          title: "계정을 찾을 수 없습니다",
-          description: result.message,
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('비밀번호 찾기 오류:', error);
-      toast({
-        title: "오류가 발생했습니다",
-        description: "비밀번호 찾기 중 오류가 발생했습니다.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsFindingAccount(false);
-    }
-  };
-
-  const resetFindAccountForm = () => {
-    setFindAccountData({
-      phone: '',
-      email: '',
-      businessNumber: ''
-    });
-    setFindAccountResult(null);
-    setIsFindAccountDialogOpen(false);
+  const handleBackToLogin = () => {
+    setShowAdminAuth(false);
+    setAdminAuthData({ phoneNumber: "", verificationCode: "" });
+    setVerificationSent(false);
+    setVerificationError("");
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-light via-white to-accent/30 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <Button
-            variant="ghost"
-            onClick={() => navigate("/")}
-            className="mb-6"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            홈으로 돌아가기
-          </Button>
-          
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="p-3 bg-primary rounded-xl">
-              <Store className="w-8 h-8 text-primary-foreground" />
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[#FDFBF8]">
+      <Card className="w-full max-w-md shadow-lg border-0">
+        <CardContent className="pt-8 px-8 pb-8">
+          {/* Header Section */}
+          <div className="text-center mb-8">
+            <div className="flex items-center justify-center mb-2">
+              <div className="p-3 bg-primary rounded-xl">
+                <Store className="w-8 h-8 text-primary-foreground" />
+              </div>
             </div>
-            <h1 className="text-3xl font-bold text-primary">오더랜드</h1>
+            <h1 className="text-3xl font-bold text-primary mb-2">오더랜드</h1>
+            <p className="text-muted-foreground text-sm">
+              {showAdminAuth ? "관리자 인증" : "로그인"}
+            </p>
           </div>
-          <p className="text-muted-foreground">
-            관리자 계정 또는 소셜 계정으로 로그인하세요
-          </p>
-        </div>
 
-        <Card className="card-hover">
-          <CardHeader>
-            <CardTitle>로그인</CardTitle>
-            <CardDescription>
-              계정 정보를 입력해주세요
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Email/Password Form */}
-            <form onSubmit={handleLogin} className="space-y-4">
+          {/* Error display area */}
+          {(loginError || verificationError) && (
+            <div className="mb-6 p-3 bg-destructive/10 border border-destructive/30 rounded-lg flex items-center text-sm text-destructive">
+              <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
+              {showAdminAuth ? verificationError : loginError}
+            </div>
+          )}
+
+          {!showAdminAuth ? (
+            /* 일반 로그인 폼 */
+            <form onSubmit={handleLogin} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="email">이메일</Label>
+                <Label htmlFor="email" className="text-sm font-medium">이메일</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                  <Mail className="absolute left-3 top-3 w-5 h-5 text-muted-foreground" />
                   <Input
                     id="email"
                     name="email"
-                    type="email"
-                    placeholder="your@email.com"
+                    type="text"
+                    placeholder="이메일"
                     value={formData.email}
                     onChange={handleInputChange}
-                    className="pl-10"
+                    className="pl-10 h-11 text-base"
                     required
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">비밀번호</Label>
+                <Label htmlFor="password" className="text-sm font-medium">비밀번호</Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                  <Lock className="absolute left-3 top-3 w-5 h-5 text-muted-foreground" />
                   <Input
                     id="password"
                     name="password"
                     type="password"
-                    placeholder="••••••••"
+                    placeholder="비밀번호"
                     value={formData.password}
                     onChange={handleInputChange}
-                    className="pl-10"
+                    className="pl-10 h-11 text-base"
                     required
                   />
                 </div>
               </div>
 
-              {error && (
-                <div className="text-red-600 text-sm text-center bg-red-50 p-3 rounded-md">
-                  {error}
-                </div>
-              )}
-
               <Button
                 type="submit"
-                className="w-full order-button"
+                className="w-full h-11 mt-4 bg-success hover:bg-success/90 text-success-foreground text-base"
                 disabled={isLoading}
               >
                 {isLoading ? "로그인 중..." : "로그인"}
               </Button>
             </form>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <Separator className="w-full" />
+          ) : (
+            /* 관리자 2차 인증 폼 */
+            <div className="space-y-5">
+              <div className="flex items-center gap-2 mb-4 p-3 bg-primary/10 rounded-lg">
+                <Shield className="w-5 h-5 text-primary" />
+                <span className="text-sm font-medium text-primary">관리자 인증이 필요합니다</span>
               </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">
-                  또는
-                </span>
-              </div>
-            </div>
 
-            {/* Social Login */}
-            <div className="space-y-3">
-              <Button
-                variant="outline"
-                onClick={() => handleSocialLogin("카카오")}
-                className="w-full btn-bounce bg-yellow-400 text-yellow-900 border-yellow-400 hover:bg-yellow-500"
-              >
-                <div className="w-5 h-5 mr-2 bg-yellow-900 rounded-full flex items-center justify-center">
-                  <span className="text-xs font-bold text-yellow-400">K</span>
+              <div className="space-y-2">
+                <Label htmlFor="phoneNumber" className="text-sm font-medium">핸드폰 번호</Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="phoneNumber"
+                    name="phoneNumber"
+                    type="tel"
+                    placeholder="010-0000-0000"
+                    value={adminAuthData.phoneNumber}
+                    onChange={handleAdminAuthChange}
+                    className="pl-10 h-11 text-base"
+                    required
+                  />
                 </div>
-                카카오로 계속하기
+              </div>
+
+              <Button
+                onClick={handleSendVerification}
+                className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground text-base"
+                disabled={verificationSent}
+              >
+                {verificationSent ? "인증번호 발송됨" : "인증번호 발송"}
               </Button>
 
-              <Button
-                variant="outline"
-                onClick={() => handleSocialLogin("네이버")}
-                className="w-full btn-bounce bg-green-500 text-white border-green-500 hover:bg-green-600"
-              >
-                <div className="w-5 h-5 mr-2 bg-white rounded-full flex items-center justify-center">
-                  <span className="text-xs font-bold text-green-500">N</span>
-                </div>
-                네이버로 계속하기
-              </Button>
-            </div>
-
-            <div className="text-center text-sm">
-              <span className="text-muted-foreground">계정이 없으신가요? </span>
-              <Button
-                variant="link"
-                onClick={() => navigate("/register")}
-                className="p-0 h-auto text-primary"
-              >
-                회원가입
-              </Button>
-            </div>
-
-            {/* Find ID/Password Links */}
-            <div className="text-center text-sm space-y-2">
-              <div>
-                <Button
-                  variant="link"
-                  onClick={() => {
-                    setFindAccountType('id');
-                    resetFindAccountForm();
-                  }}
-                  className="p-0 h-auto text-primary"
-                >
-                  아이디 찾기
-                </Button>
-                <span className="text-muted-foreground mx-2">|</span>
-                <Button
-                  variant="link"
-                  onClick={() => {
-                    setFindAccountType('password');
-                    resetFindAccountForm();
-                  }}
-                  className="p-0 h-auto text-primary"
-                >
-                  비밀번호 찾기
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Find ID/Password Dialog */}
-        <Dialog open={isFindAccountDialogOpen} onOpenChange={() => resetFindAccountForm()}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>
-                {findAccountType === 'id' ? '아이디 찾기' : '비밀번호 찾기'}
-              </DialogTitle>
-              <DialogDescription>
-                {findAccountType === 'id' 
-                  ? '등록된 전화번호로 아이디를 찾을 수 있습니다.'
-                  : '등록된 이메일과 전화번호로 비밀번호를 재설정할 수 있습니다.'
-                }
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4">
-              {findAccountType === 'id' ? (
-                /* Find ID Form */
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="find-phone">전화번호</Label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        id="find-phone"
-                        name="phone"
-                        type="tel"
-                        placeholder="000-0000-0000"
-                        value={findAccountData.phone}
-                        onChange={handleFindAccountInputChange}
-                        className="pl-10"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      가입 시 등록한 전화번호를 입력해주세요
-                    </p>
+              {verificationSent && (
+                <div className="space-y-2">
+                  <Label htmlFor="verificationCode" className="text-sm font-medium">인증번호</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3 w-5 h-5 text-muted-foreground" />
+                    <Input
+                      id="verificationCode"
+                      name="verificationCode"
+                      type="text"
+                      placeholder="인증번호 6자리"
+                      value={adminAuthData.verificationCode}
+                      onChange={handleAdminAuthChange}
+                      className="pl-10 h-11 text-base"
+                      maxLength={6}
+                      required
+                    />
                   </div>
-
-                  <Button
-                    onClick={handleFindId}
-                    disabled={isFindingAccount || !findAccountData.phone}
-                    className="w-full"
-                  >
-                    {isFindingAccount ? "찾는 중..." : "아이디 찾기"}
-                  </Button>
-                </div>
-              ) : (
-                /* Find Password Form */
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="find-email">이메일</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        id="find-email"
-                        name="email"
-                        type="email"
-                        placeholder="your@email.com"
-                        value={findAccountData.email}
-                        onChange={handleFindAccountInputChange}
-                        className="pl-10"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="find-password-phone">전화번호</Label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        id="find-password-phone"
-                        name="phone"
-                        type="tel"
-                        placeholder="000-0000-0000"
-                        value={findAccountData.phone}
-                        onChange={handleFindAccountInputChange}
-                        className="pl-10"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      가입 시 등록한 이메일과 전화번호를 입력해주세요
-                    </p>
-                  </div>
-
-                  <Button
-                    onClick={handleFindPassword}
-                    disabled={isFindingAccount || !findAccountData.email || !findAccountData.phone}
-                    className="w-full"
-                  >
-                    {isFindingAccount ? "처리 중..." : "비밀번호 재설정 이메일 발송"}
-                  </Button>
                 </div>
               )}
 
-              {/* Result Display */}
-              {findAccountResult && (
-                <div className={`p-4 rounded-md ${
-                  findAccountResult.success 
-                    ? 'bg-green-50 border border-green-200' 
-                    : 'bg-red-50 border border-red-200'
-                }`}>
-                  <div className="flex items-start gap-3">
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                      findAccountResult.success ? 'bg-green-500' : 'bg-red-500'
-                    }`}>
-                      <span className="text-white text-xs">
-                        {findAccountResult.success ? '✓' : '✕'}
-                      </span>
-                    </div>
-                    <div className="flex-1">
-                      <p className={`text-sm font-medium ${
-                        findAccountResult.success ? 'text-green-800' : 'text-red-800'
-                      }`}>
-                        {findAccountResult.message}
-                      </p>
-                      {findAccountResult.success && findAccountResult.email && (
-                        <p className="text-xs text-green-600 mt-1">
-                          찾은 이메일: {findAccountResult.email}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
+              {verificationSent && (
+                <Button
+                  onClick={handleVerifyCode}
+                  className="w-full h-11 bg-success hover:bg-success/90 text-success-foreground text-base"
+                >
+                  인증 확인
+                </Button>
               )}
-            </div>
-          </DialogContent>
-        </Dialog>
 
-        {/* Demo Login Info */}
-        <Card className="mt-6 bg-muted/50">
-          <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground text-center">
-              <strong>테스트 계정:</strong> Firebase에 등록된 이메일과 비밀번호로 로그인하세요.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+              <Button
+                variant="outline"
+                onClick={handleBackToLogin}
+                className="w-full h-11 text-base"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                로그인으로 돌아가기
+              </Button>
+            </div>
+          )}
+
+          {/* Additional Navigation Links - 관리자 인증 중에는 숨김 */}
+          {!showAdminAuth && (
+            <div className="mt-6">
+              <div className="text-center mb-4">
+                <span className="text-muted-foreground text-sm">아직 계정이 없으신가요? </span>
+                <Button
+                  variant="link"
+                  onClick={() => navigate("/register")}
+                  className="p-0 h-auto text-primary text-sm"
+                >
+                  회원가입
+                </Button>
+              </div>
+              
+              <div className="flex justify-center gap-6 text-xs">
+                <Button
+                  variant="link"
+                  className="p-0 h-auto text-muted-foreground hover:text-primary"
+                  onClick={() => setFindAccountModalOpen(true)}
+                >
+                  아이디 찾기 / 비밀번호 재설정
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Find Account Modal */}
+      <FindAccountModal 
+        open={findAccountModalOpen}
+        onOpenChange={setFindAccountModalOpen}
+        onLoginRedirect={() => {}}
+      />
     </div>
   );
 };

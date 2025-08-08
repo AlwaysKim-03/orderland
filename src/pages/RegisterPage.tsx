@@ -3,41 +3,49 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Store, ArrowLeft, Phone, User, Building, Mail, Lock, Check, RefreshCw } from "lucide-react";
+import { Store, ArrowLeft, Phone, User, Building, Mail, Lock, Check, Upload, FileText, CheckCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification as firebaseSendEmailVerification, onAuthStateChanged, RecaptchaVerifier, signInWithPhoneNumber, signInWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification as sendEmailVerificationFirebase, RecaptchaVerifier, signInWithPhoneNumber, signOut, signInWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
-import { auth, db } from "../firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { auth, db, storage } from "../firebase";
 
 const RegisterPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  
+  // 손님용 페이지에서는 항상 라이트 모드 사용
+  useEffect(() => {
+    // 다크모드 클래스 제거하여 라이트 모드 강제 적용
+    document.documentElement.classList.remove('dark');
+    document.documentElement.classList.add('light');
+    
+    // 회원가입 중임을 표시
+    localStorage.setItem('isRegistering', 'true');
+    
+    // 컴포넌트 언마운트 시 플래그 제거
+    return () => {
+      localStorage.removeItem('isRegistering');
+    };
+  }, []);
+  
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [isVerificationSent, setIsVerificationSent] = useState(false);
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [isEmailVerified, setIsEmailVerified] = useState(false);
-  const [isEmailVerificationSent, setIsEmailVerificationSent] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isFileUploaded, setIsFileUploaded] = useState(false);
+  const [recaptchaVerifier, setRecaptchaVerifier] = useState<RecaptchaVerifier | null>(null);
   const [confirmationResult, setConfirmationResult] = useState<any>(null);
-  const [recaptchaVerifier, setRecaptchaVerifier] = useState<any>(null);
-  const [phoneVerificationCode, setPhoneVerificationCode] = useState<string>("");
   
-  // 회원가입 시작 시 localStorage에 상태 설정
-  useEffect(() => {
-    localStorage.setItem('isRegistering', 'true');
-    
-    // 컴포넌트 언마운트 시 localStorage 정리
-    return () => {
-      localStorage.removeItem('isRegistering');
-    };
-  }, []);
-
   const [formData, setFormData] = useState({
     // Step 1 - Phone verification
     phone: "",
     name: "",
+    verificationCode: "",
     // Step 2 - Store info & account
     storeName: "",
     email: "",
@@ -46,6 +54,169 @@ const RegisterPage = () => {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // reCAPTCHA 초기화
+  useEffect(() => {
+    if (!recaptchaVerifier && currentStep === 1) {
+      const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        'size': 'normal',
+        'callback': (response: any) => {
+          console.log('reCAPTCHA solved:', response);
+        },
+        'expired-callback': () => {
+          console.log('reCAPTCHA expired');
+          toast({
+            title: "인증 시간이 만료되었습니다",
+            description: "다시 시도해주세요.",
+            variant: "destructive",
+          });
+        }
+      });
+      setRecaptchaVerifier(verifier);
+    }
+  }, [recaptchaVerifier, currentStep, toast]);
+
+  // 자동 로그인 방지 (useAuth 훅에서 처리하므로 여기서는 로그아웃 처리 제거)
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user && currentStep < 3) {
+        // 회원가입 중에 자동 로그인이 발생해도 로그아웃하지 않고, useAuth 훅에서 리다이렉트를 방지합니다.
+        console.log('회원가입 중 자동 로그인 감지, 리다이렉트 방지는 useAuth에서 처리');
+      }
+    });
+
+    return () => unsubscribe();
+  }, [currentStep]);
+
+  // 이메일 인증 상태 자동 감지
+  useEffect(() => {
+    const checkEmailVerification = async () => {
+      let currentUser = auth.currentUser;
+      
+      // 사용자가 없으면 이메일/비밀번호로 재로그인 시도
+      if (!currentUser && formData.email && formData.password) {
+        try {
+          const userCredential = await signInWithEmailAndPassword(
+            auth,
+            formData.email,
+            formData.password
+          );
+          currentUser = userCredential.user;
+        } catch (error) {
+          console.error('자동 감지 재로그인 실패:', error);
+          return;
+        }
+      }
+      
+      if (currentUser && currentUser.email === formData.email) {
+        try {
+          await currentUser.reload();
+          if (currentUser.emailVerified && !isEmailVerified) {
+            console.log('이메일 인증 상태 자동 감지: 완료');
+            setIsEmailVerified(true);
+            toast({
+              title: "이메일 인증 완료",
+              description: "이메일 인증이 완료되었습니다.",
+            });
+          }
+        } catch (error) {
+          console.error('이메일 인증 상태 확인 오류:', error);
+        }
+      }
+    };
+
+    // 초기 확인
+    checkEmailVerification();
+
+    // 주기적 확인 (5초마다, 2분간)
+    const interval = setInterval(checkEmailVerification, 5000);
+    
+    // 2분 후 인터벌 정리
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+    }, 120000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [formData.email, formData.password, isEmailVerified, toast]);
+
+  // 페이지 포커스 시 이메일 인증 상태 재확인
+  useEffect(() => {
+    const handleFocus = async () => {
+      let currentUser = auth.currentUser;
+      
+      // 사용자가 없으면 이메일/비밀번호로 재로그인 시도
+      if (!currentUser && formData.email && formData.password) {
+        try {
+          const userCredential = await signInWithEmailAndPassword(
+            auth,
+            formData.email,
+            formData.password
+          );
+          currentUser = userCredential.user;
+        } catch (error) {
+          console.error('페이지 포커스 재로그인 실패:', error);
+          return;
+        }
+      }
+      
+      if (currentUser && currentUser.email === formData.email) {
+        try {
+          await currentUser.reload();
+          if (currentUser.emailVerified && !isEmailVerified) {
+            console.log('페이지 포커스 시 이메일 인증 감지: 완료');
+            setIsEmailVerified(true);
+            toast({
+              title: "이메일 인증 완료",
+              description: "이메일 인증이 완료되었습니다.",
+            });
+          }
+        } catch (error) {
+          console.error('페이지 포커스 시 인증 확인 실패:', error);
+        }
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [formData.email, formData.password, isEmailVerified, toast]);
+
+  // 한국 전화번호를 국제 형식으로 변환
+  const convertToInternationalFormat = (phone: string) => {
+    const numbers = phone.replace(/[^\d]/g, '');
+    
+    // 이미 +82로 시작하면 그대로 반환
+    if (phone.startsWith('+82')) {
+      return phone;
+    }
+    
+    // 010, 011, 016, 017, 018, 019로 시작하는 경우
+    if (numbers.startsWith('010') || numbers.startsWith('011') || 
+        numbers.startsWith('016') || numbers.startsWith('017') || 
+        numbers.startsWith('018') || numbers.startsWith('019')) {
+      return `+82${numbers.substring(1)}`; // 첫 번째 0 제거하고 +82 추가
+    }
+    
+    // 02로 시작하는 서울 지역번호
+    if (numbers.startsWith('02')) {
+      return `+82${numbers}`; // 02 그대로 두고 +82 추가
+    }
+    
+    // 기타 지역번호 (031, 032, 033, 041, 042, 043, 044, 051, 052, 053, 054, 055, 061, 062, 063, 064)
+    if (numbers.length >= 2 && numbers.startsWith('0')) {
+      return `+82${numbers.substring(1)}`; // 첫 번째 0 제거하고 +82 추가
+    }
+    
+    // 이미 숫자만 있는 경우 (01012345678)
+    if (numbers.length === 11 && numbers.startsWith('0')) {
+      return `+82${numbers.substring(1)}`;
+    }
+    
+    // 그 외의 경우 원본 반환
+    return phone;
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -76,48 +247,48 @@ const RegisterPage = () => {
       setErrors({ phone: "전화번호와 이름을 입력해주세요" });
       return;
     }
-    
+
+    if (!recaptchaVerifier) {
+      toast({
+        title: "인증 준비 중",
+        description: "잠시 후 다시 시도해주세요.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
+    
     try {
-      // reCAPTCHA 설정
-      if (!recaptchaVerifier) {
-        const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          'size': 'invisible',
-          'callback': (response: any) => {
-            console.log('reCAPTCHA solved');
-          }
-        });
-        setRecaptchaVerifier(verifier);
-      }
+      // 전화번호를 국제 형식으로 변환
+      const internationalPhone = convertToInternationalFormat(formData.phone);
+      console.log('전화번호 인증 시작:', internationalPhone);
       
-      // 전화번호 형식 변환 (국제 형식)
-      const phoneNumber = formData.phone.replace(/-/g, '');
-      const internationalPhone = phoneNumber.startsWith('0') ? `+82${phoneNumber.slice(1)}` : phoneNumber;
-      
-      // SMS 인증 코드 발송 (Firebase 인증 없이 단순 인증만)
+      // SMS 인증 코드 발송
       const confirmation = await signInWithPhoneNumber(auth, internationalPhone, recaptchaVerifier);
       setConfirmationResult(confirmation);
-      setIsVerificationSent(true);
       
+      setIsVerificationSent(true);
       toast({
         title: "인증번호가 전송되었습니다",
         description: "입력하신 전화번호로 인증번호를 보내드렸습니다.",
       });
     } catch (error: any) {
-      console.error("SMS 인증 발송 오류:", error);
+      console.error('SMS 인증 오류:', error);
+      let errorMessage = '인증번호 발송에 실패했습니다.';
       
-      let errorMessage = "인증번호 발송 중 오류가 발생했습니다.";
-      
-      if (error.code === "auth/invalid-phone-number") {
-        errorMessage = "유효하지 않은 전화번호 형식입니다.";
-      } else if (error.code === "auth/too-many-requests") {
-        errorMessage = "너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요.";
+      if (error.code === 'auth/invalid-phone-number') {
+        errorMessage = '올바르지 않은 전화번호 형식입니다.';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = '너무 많은 요청이 있었습니다. 잠시 후 다시 시도해주세요.';
+      } else if (error.code === 'auth/quota-exceeded') {
+        errorMessage = 'SMS 할당량을 초과했습니다. 잠시 후 다시 시도해주세요.';
       }
       
       toast({
         title: "인증번호 발송 실패",
         description: errorMessage,
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -125,452 +296,308 @@ const RegisterPage = () => {
   };
 
   const verifyPhone = async () => {
-    console.log('=== 전화번호 인증 확인 시작 ===');
-    console.log('입력된 인증 코드:', phoneVerificationCode);
-    
-    if (!phoneVerificationCode || phoneVerificationCode.length !== 6) {
+    if (formData.verificationCode.length !== 6) {
       setErrors({ verificationCode: "6자리 인증번호를 입력해주세요" });
       return;
     }
-    
+
     if (!confirmationResult) {
       toast({
-        title: "오류",
-        description: "인증 정보를 찾을 수 없습니다. 다시 시도해주세요.",
-        variant: "destructive"
+        title: "인증 정보가 없습니다",
+        description: "인증번호를 다시 발송해주세요.",
+        variant: "destructive",
       });
       return;
     }
-    
+
     setIsLoading(true);
+    
     try {
-      console.log('🔄 전화번호 인증 코드 확인 시도...');
+      // 인증 코드 확인
+      const result = await confirmationResult.confirm(formData.verificationCode);
       
-      // 인증 코드 확인 (Firebase 인증은 하지 않고 인증만 확인)
-      const result = await confirmationResult.confirm(phoneVerificationCode);
-      
-      // 인증이 성공적으로 완료되었는지 확인
+      // 전화번호 인증 완료 - 자동 로그인 방지를 위해 즉시 로그아웃
       if (result.user) {
-        console.log('✅ 전화번호 인증 성공');
-        
-        // 전화번호 인증 정보를 localStorage에 저장 (Firebase 계정 생성 연기)
-        localStorage.setItem('phoneVerificationToken', Math.random().toString(36).substring(2, 15));
-        localStorage.setItem('tempUserPhone', formData.phone);
-        localStorage.setItem('tempUserName', formData.name);
-        localStorage.setItem('phoneVerificationTime', Date.now().toString());
-        
-        console.log('💾 전화번호 인증 정보 저장 완료');
-        
-        setIsPhoneVerified(true);
-        setCurrentStep(2);
-        toast({
-          title: "전화번호 인증 완료",
-          description: "다음 단계로 진행해주세요.",
-        });
-        
-        // Firebase 인증 상태를 즉시 초기화 (회원가입 완료 시까지)
-        await auth.signOut();
-        
-        // 추가로 인증 상태를 완전히 초기화
-        setTimeout(async () => {
-          if (auth.currentUser) {
-            await auth.signOut();
-          }
-        }, 100);
-        
-        // localStorage에 회원가입 중임을 명시적으로 표시
-        localStorage.setItem('isRegistering', 'true');
-      } else {
-        throw new Error("인증에 실패했습니다.");
+        await signOut(auth);
+        console.log('전화번호 인증 완료 후 자동 로그인 방지');
       }
+      
+      // 전화번호 인증 완료 - 다음 단계로 진행
+      setIsPhoneVerified(true);
+      setCurrentStep(2);
+      
+      // reCAPTCHA 리셋
+      if (recaptchaVerifier) {
+        recaptchaVerifier.clear();
+        setRecaptchaVerifier(null);
+      }
+      
+      toast({
+        title: "전화번호 인증 완료",
+        description: "다음 단계로 진행해주세요.",
+      });
     } catch (error: any) {
-      console.error("❌ 인증 코드 확인 오류:", error);
-      console.log('오류 코드:', error.code);
-      console.log('오류 메시지:', error.message);
+      console.error('인증 코드 확인 오류:', error);
+      let errorMessage = '인증번호가 올바르지 않습니다.';
       
-      let errorMessage = "인증번호가 올바르지 않습니다.";
-      
-      if (error.code === "auth/invalid-verification-code") {
-        errorMessage = "잘못된 인증번호입니다. 다시 확인해주세요.";
-      } else if (error.code === "auth/code-expired") {
-        errorMessage = "인증번호가 만료되었습니다. 새로운 인증번호를 요청해주세요.";
-      } else if (error.code === "auth/too-many-requests") {
-        errorMessage = "너무 많은 시도가 있었습니다. 잠시 후 다시 시도해주세요.";
+      if (error.code === 'auth/invalid-verification-code') {
+        errorMessage = '잘못된 인증번호입니다. 다시 확인해주세요.';
+      } else if (error.code === 'auth/code-expired') {
+        errorMessage = '인증번호가 만료되었습니다. 다시 발송해주세요.';
       }
       
+      setErrors({ verificationCode: errorMessage });
       toast({
         title: "인증 실패",
         description: errorMessage,
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
-      console.log('=== 전화번호 인증 확인 프로세스 완료 ===');
     }
   };
 
-  const sendEmailVerification = async () => {
-    console.log('=== 이메일 인증 시작 ===');
-    console.log('현재 환경:', import.meta.env.MODE);
-    console.log('개발 모드 여부:', import.meta.env.DEV);
-    console.log('입력된 이메일:', formData.email);
-    console.log('입력된 비밀번호:', formData.password ? '***' : '없음');
-    
+  const sendEmailVerificationLocal = async () => {
     if (!formData.email) {
-      console.log('❌ 이메일이 입력되지 않음');
       setErrors({ email: "이메일을 입력해주세요" });
       return;
     }
-    
+
     if (!formData.password) {
-      console.log('❌ 비밀번호가 입력되지 않음');
       setErrors({ password: "비밀번호를 먼저 입력해주세요" });
       return;
     }
-    
+
     setIsLoading(true);
+    
     try {
-      console.log('🟡 토큰 기반 이메일 인증 시도');
+      // 실제 계정 생성 (이메일 인증용)
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        formData.email,
+        formData.password
+      );
       
-      // 토큰 기반 인증 (Firebase 계정 생성 없이)
-      const verificationToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6자리 코드
+      const user = userCredential.user;
       
-      console.log('🔑 생성된 인증 토큰:', verificationToken);
-      console.log('🔢 생성된 인증 코드:', verificationCode);
+      // 이메일 인증 발송
+      await sendEmailVerificationFirebase(user);
       
-      // 임시 인증 정보를 localStorage에 저장
-      localStorage.setItem('emailVerificationToken', verificationToken);
-      localStorage.setItem('emailVerificationCode', verificationCode);
-      localStorage.setItem('tempUserEmail', formData.email);
-      localStorage.setItem('tempUserPassword', formData.password);
-      localStorage.setItem('emailVerificationTime', Date.now().toString());
-      
-      console.log('💾 토큰 기반 인증 정보 저장 완료');
-      
-      // 실제 이메일 발송 (여기서는 시뮬레이션)
-      console.log('📧 토큰 기반 이메일 발송 시뮬레이션');
-      console.log('📧 인증 코드:', verificationCode);
-      
-      setIsEmailVerificationSent(true);
       toast({
-        title: "인증 메일이 발송되었습니다",
-        description: `인증 코드: ${verificationCode} (개발용)`,
+        title: "인증 메일이 전송되었습니다",
+        description: "이메일을 확인하고 인증을 완료해주세요. 인증 후 '인증 확인' 버튼을 눌러주세요.",
       });
+      
     } catch (error: any) {
-      console.error("❌ 이메일 인증 발송 오류:", error);
-      console.log('오류 코드:', error.code);
-      console.log('오류 메시지:', error.message);
+      console.error('이메일 인증 발송 오류:', error);
+      let errorMessage = '이메일 인증 발송에 실패했습니다.';
       
-      let errorMessage = "이메일 인증 발송 중 오류가 발생했습니다.";
-      
-      if (error.code === "auth/invalid-email") {
-        errorMessage = "유효하지 않은 이메일 형식입니다.";
-      } else if (error.code === "auth/email-already-in-use") {
-        errorMessage = "이미 사용 중인 이메일입니다.";
-      } else if (error.code === "auth/weak-password") {
-        errorMessage = "비밀번호가 너무 약합니다.";
-      } else if (error.code === "auth/too-many-requests") {
-        errorMessage = "너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요.";
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = '이미 사용 중인 이메일입니다.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = '유효하지 않은 이메일 형식입니다.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = '비밀번호가 너무 약합니다. (최소 6자)';
       }
       
       toast({
-        title: "인증 메일 발송 실패",
+        title: "이메일 인증 발송 실패",
         description: errorMessage,
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
-      console.log('=== 이메일 인증 프로세스 완료 ===');
-    }
-  };
-
-  const checkEmailVerification = async () => {
-    console.log('=== 이메일 인증 확인 시작 ===');
-    console.log('현재 환경:', import.meta.env.MODE);
-    console.log('개발 모드 여부:', import.meta.env.DEV);
-    
-    console.log('🟡 토큰 기반 이메일 인증 상태 확인');
-    
-    setIsLoading(true);
-    try {
-      console.log('🔄 토큰 기반 인증 확인 시도...');
-      // 토큰 기반 인증 확인
-      const verificationToken = localStorage.getItem('emailVerificationToken');
-      const tokenUserEmail = localStorage.getItem('tempUserEmail');
-      const verificationCode = localStorage.getItem('emailVerificationCode');
-      const verificationTime = localStorage.getItem('emailVerificationTime');
-      
-      console.log('📋 토큰 기반 인증 정보:');
-      console.log('- verificationToken:', verificationToken ? '있음' : '없음');
-      console.log('- tokenUserEmail:', tokenUserEmail);
-      console.log('- verificationCode:', verificationCode);
-      console.log('- verificationTime:', verificationTime);
-      
-      if (!verificationToken || !tokenUserEmail || !verificationCode || !verificationTime) {
-        console.log('❌ 토큰 기반 인증 정보 부족');
-        toast({
-          title: "오류",
-          description: "인증 정보를 찾을 수 없습니다. 다시 인증 메일을 발송해주세요.",
-          variant: "destructive"
-        });
-        return;
-      }
-      
-      if (tokenUserEmail !== formData.email) {
-        console.log('❌ 이메일 주소 불일치');
-        console.log('입력된 이메일:', formData.email);
-        console.log('토큰 이메일:', tokenUserEmail);
-        toast({
-          title: "오류",
-          description: "이메일 주소가 일치하지 않습니다.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      const currentTime = Date.now();
-      const elapsedTime = (currentTime - parseInt(verificationTime, 10)) / 1000; // 초 단위
-      console.log('🕒 경과 시간:', elapsedTime, '초');
-
-      if (elapsedTime > 300) { // 5분 (300초)
-        console.log('❌ 인증 코드 만료됨');
-        toast({
-          title: "인증 코드 만료",
-          description: "인증 코드가 만료되었습니다. 새로운 인증 메일을 요청해주세요.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // 인증 코드 입력 요구
-      const userInputCode = prompt('이메일로 받은 6자리 인증 코드를 입력해주세요:');
-      if (!userInputCode) {
-        console.log('❌ 인증 코드 입력 취소');
-        toast({
-          title: "인증 취소",
-          description: "인증 코드 입력이 취소되었습니다.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      if (userInputCode !== verificationCode) {
-        console.log('❌ 인증 코드 불일치');
-        console.log('입력된 코드:', userInputCode);
-        console.log('저장된 코드:', verificationCode);
-        toast({
-          title: "인증 코드 불일치",
-          description: "인증 코드가 일치하지 않습니다. 다시 확인해주세요.",
-          variant: "destructive"
-        });
-        return;
-      }
-      
-      // 토큰이 있고 코드가 일치하면 인증 완료로 처리
-      if (verificationToken && userInputCode === verificationCode) {
-        console.log('✅ 토큰 기반 인증 완료');
-        setIsEmailVerified(true);
-        
-        // 인증 완료 후 토큰 삭제
-        localStorage.removeItem('emailVerificationToken');
-        localStorage.removeItem('emailVerificationCode');
-        localStorage.removeItem('emailVerificationTime');
-        console.log('🗑️ 인증 토큰 삭제 완료');
-        
-        toast({
-          title: "이메일 인증 완료",
-          description: "이메일 인증이 완료되었습니다.",
-        });
-      } else {
-        console.log('❌ 토큰이 없음');
-        toast({
-          title: "인증 필요",
-          description: "이메일 인증이 완료되지 않았습니다. 이메일을 확인해주세요.",
-          variant: "destructive"
-        });
-      }
-    } catch (error: any) {
-      console.error("❌ 이메일 인증 확인 오류:", error);
-      console.log('오류 코드:', error.code);
-      console.log('오류 메시지:', error.message);
-      
-      toast({
-        title: "인증 확인 실패",
-        description: "인증 상태를 확인할 수 없습니다.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
-      console.log('=== 이메일 인증 확인 프로세스 완료 ===');
     }
   };
 
   const validateStep2 = () => {
     const newErrors: Record<string, string> = {};
-    
-    if (!formData.storeName) newErrors.storeName = "가게 이름을 입력해주세요";
-    if (!isEmailVerified) newErrors.email = "이메일 인증을 완료해주세요";
-    if (!validatePassword(formData.password)) {
-      newErrors.password = "비밀번호는 8자 이상, 특수문자를 포함해야 합니다";
-    }
+
+    if (!formData.storeName) newErrors.storeName = "매장명을 입력해주세요";
+    if (!formData.email) newErrors.email = "이메일을 입력해주세요";
+    if (!formData.password) newErrors.password = "비밀번호를 입력해주세요";
     if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = "비밀번호가 일치하지 않습니다";
     }
-    
+    if (!validatePassword(formData.password)) {
+      newErrors.password = "비밀번호는 8자 이상이어야 하며 특수문자를 포함해야 합니다";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const proceedToStep3 = () => {
-    // 전화번호 인증이 완료되지 않았으면 Step 1으로 돌아가기
-    if (!isPhoneVerified) {
-      toast({
-        title: "전화번호 인증 필요",
-        description: "전화번호 인증을 먼저 완료해주세요.",
-        variant: "destructive"
-      });
-      setCurrentStep(1);
-      return;
-    }
-    
+  const completeAccountStep = () => {
     if (validateStep2()) {
-      // 2단계에서 바로 회원가입 완료
-      completeRegistration();
+      setCurrentStep(3);
+      toast({
+        title: "계정 정보 입력 완료",
+        description: "마지막 단계로 진행해주세요.",
+      });
     }
   };
 
-  const completeRegistration = async () => {
-    console.log('=== 회원가입 완료 시작 ===');
-    console.log('현재 환경:', import.meta.env.MODE);
-    console.log('개발 모드 여부:', import.meta.env.DEV);
-    console.log('전화번호 인증 상태:', isPhoneVerified);
-    console.log('이메일 인증 상태:', isEmailVerified);
-    
-    // 전화번호 인증 확인
-    const phoneVerificationToken = localStorage.getItem('phoneVerificationToken');
-    const tempUserPhone = localStorage.getItem('tempUserPhone');
-    const tempUserName = localStorage.getItem('tempUserName');
-    
-    console.log('📋 전화번호 인증 정보:');
-    console.log('- phoneVerificationToken:', phoneVerificationToken ? '있음' : '없음');
-    console.log('- tempUserPhone:', tempUserPhone);
-    console.log('- tempUserName:', tempUserName);
-    
-    if (!phoneVerificationToken || !tempUserPhone || !tempUserName) {
-      console.log('❌ 전화번호 인증 정보 부족');
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setIsLoading(true);
+      try {
+        // 파일 크기 확인 (10MB 제한)
+        if (file.size > 10 * 1024 * 1024) {
+          toast({
+            title: "파일 크기 초과",
+            description: "파일 크기는 10MB 이하여야 합니다.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // 파일 형식 확인
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+        if (!allowedTypes.includes(file.type)) {
+          toast({
+            title: "지원하지 않는 파일 형식",
+            description: "JPG, PNG, PDF 파일만 업로드 가능합니다.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        setUploadedFile(file);
+        setIsFileUploaded(true);
+        toast({
+          title: "파일 업로드 준비 완료",
+          description: "회원가입 시 서버에 업로드됩니다.",
+        });
+      } catch (error) {
+        console.error('파일 업로드 오류:', error);
+        toast({
+          title: "파일 업로드 실패",
+          description: "파일 업로드 중 오류가 발생했습니다.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  const removeUploadedFile = () => {
+    setUploadedFile(null);
+    setIsFileUploaded(false);
+  };
+
+  const submitBusinessRegistration = async () => {
+    // 모든 필수 정보가 입력되었는지 확인
+    if (!formData.name || !formData.email || !formData.password || !formData.storeName) {
       toast({
-        title: "전화번호 인증 필요",
-        description: "전화번호 인증을 먼저 완료해주세요.",
-        variant: "destructive"
+        title: "필수 정보를 모두 입력해주세요",
+        description: "이름, 이메일, 비밀번호, 가게 이름을 모두 입력해주세요.",
+        variant: "destructive",
       });
-      setCurrentStep(1);
-      setIsLoading(false);
       return;
     }
-    
-    if (tempUserPhone !== formData.phone || tempUserName !== formData.name) {
-      console.log('❌ 전화번호 또는 이름 불일치');
+
+    // 전화번호 인증이 완료되었는지 확인
+    if (!isPhoneVerified) {
       toast({
-        title: "인증 정보 불일치",
-        description: "전화번호 또는 이름이 일치하지 않습니다.",
-        variant: "destructive"
+        title: "전화번호 인증이 필요합니다",
+        description: "전화번호 인증을 완료해주세요.",
+        variant: "destructive",
       });
-      setCurrentStep(1);
-      setIsLoading(false);
       return;
     }
-    
-    console.log('✅ 전화번호 인증 확인 통과');
-    
-    // 이메일 인증 확인
+
+    // 이메일 인증이 완료되었는지 확인
     if (!isEmailVerified) {
-      console.log('❌ 이메일 인증 미완료');
       toast({
-        title: "이메일 인증 필요",
+        title: "이메일 인증이 필요합니다",
         description: "이메일 인증을 완료해주세요.",
-        variant: "destructive"
+        variant: "destructive",
       });
-      setCurrentStep(2);
-      setIsLoading(false);
       return;
     }
-    
-    console.log('✅ 이메일 인증 확인 통과');
+
     setIsLoading(true);
     
     try {
-      // 모든 인증이 완료된 후 Firebase 계정 생성
-      let userCredential;
-      console.log('🟡 Firebase 계정 생성 시작');
+      console.log('=== 가입 정보 저장 시작 ===');
+      console.log('입력된 데이터:', {
+        email: formData.email,
+        name: formData.name,
+        phone: formData.phone,
+        storeName: formData.storeName,
+        password: formData.password ? '***' : '없음'
+      });
       
-      try {
-        // 새 Firebase 계정 생성
-        userCredential = await createUserWithEmailAndPassword(
-          auth,
-          formData.email,
-          formData.password
-        );
-        console.log('✅ Firebase 계정 생성 성공:', userCredential.user.uid);
-      } catch (error: any) {
-        console.error('❌ Firebase 계정 생성 실패:', error);
-        
-        let errorMessage = "계정 생성 중 오류가 발생했습니다.";
-        
-        if (error.code === "auth/email-already-in-use") {
-          errorMessage = "이미 사용 중인 이메일입니다.";
-        } else if (error.code === "auth/weak-password") {
-          errorMessage = "비밀번호가 너무 약합니다.";
-        } else if (error.code === "auth/invalid-email") {
-          errorMessage = "유효하지 않은 이메일 형식입니다.";
-        }
-        
+      // 현재 로그인된 사용자 확인
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
         toast({
-          title: "계정 생성 실패",
-          description: errorMessage,
-          variant: "destructive"
+          title: "계정이 생성되지 않았습니다",
+          description: "이메일 인증을 먼저 완료해주세요.",
+          variant: "destructive",
         });
-        setIsLoading(false);
         return;
       }
       
-      const user = userCredential.user;
-      console.log('👤 최종 사용자 정보:', user.uid);
-
-      console.log('📝 사용자 프로필 업데이트...');
       // 사용자 프로필 업데이트
-      await updateProfile(user, {
+      console.log('사용자 프로필 업데이트 시작...');
+      await updateProfile(currentUser, {
         displayName: formData.name
       });
-      console.log('✅ 프로필 업데이트 완료');
-
-      console.log('💾 Firestore에 사용자 정보 저장...');
+      console.log('사용자 프로필 업데이트 완료');
+      
       // Firestore에 사용자 정보 저장
-      await setDoc(doc(db, "users", user.uid), {
-        uid: user.uid,
-        businessNumber: "",
-        businessName: "",
-        ownerName: formData.name,
+      console.log('Firestore 사용자 정보 저장 시작...');
+      
+      // 사업자등록 파일 업로드
+      let businessDocumentUrl = "";
+      if (uploadedFile) {
+        try {
+          console.log('사업자등록 파일 업로드 시작...');
+          const fileName = `business-documents/${currentUser.uid}/${uploadedFile.name}`;
+          const storageRef = ref(storage, fileName);
+          await uploadBytes(storageRef, uploadedFile);
+          businessDocumentUrl = await getDownloadURL(storageRef);
+          console.log('사업자등록 파일 업로드 완료:', businessDocumentUrl);
+        } catch (uploadError) {
+          console.error('사업자등록 파일 업로드 실패:', uploadError);
+          toast({
+            title: "파일 업로드 실패",
+            description: "사업자등록 파일 업로드 중 오류가 발생했습니다.",
+            variant: "destructive",
+          });
+        }
+      }
+      
+      const userData = {
+        uid: currentUser.uid,
+        name: formData.name,
         email: formData.email,
-        phoneNumber: formData.phone,
+        phone: convertToInternationalFormat(formData.phone), // 전화번호를 국제 형식으로 변환하여 저장
         storeName: formData.storeName,
-        role: "admin",
+        businessVerified: false, // 관리자 승인 대기 상태로 변경
+        businessDocument: uploadedFile ? uploadedFile.name : "없음", // 업로드된 파일이 있으면 파일명, 없으면 "없음"
+        businessDocumentUrl: businessDocumentUrl, // 파일 다운로드 URL
         createdAt: new Date(),
-        isActive: true,
-        openingDate: null,
-        emailVerified: true,
-        phoneVerified: true,
-        businessVerified: false,
-        businessVerificationData: null
-      });
-      console.log('✅ Firestore 사용자 정보 저장 완료');
-
-      console.log('⚙️ 기본 설정 데이터 생성...');
+        role: "admin",
+        isActive: false, // 관리자 승인 전까지 비활성 상태
+        emailVerified: currentUser.emailVerified,
+        phoneVerified: true, // 전화번호 인증 완료 표시
+        approvalStatus: "pending" // 승인 상태: pending, approved, rejected
+      };
+      console.log('저장할 사용자 데이터:', userData);
+      
+      await setDoc(doc(db, "users", currentUser.uid), userData);
+      console.log('Firestore 사용자 정보 저장 완료');
+      
       // 기본 설정 데이터 생성
-      await setDoc(doc(db, "settings", "store"), {
+      console.log('Firestore 설정 데이터 저장 시작...');
+      const settingsData = {
         storeName: formData.storeName,
         storeAddress: "",
-        storePhone: formData.phone,
+        storePhone: convertToInternationalFormat(formData.phone), // 전화번호를 국제 형식으로 변환하여 저장
         businessHours: {
           monday: { open: "09:00", close: "22:00", closed: false },
           tuesday: { open: "09:00", close: "22:00", closed: false },
@@ -578,77 +605,56 @@ const RegisterPage = () => {
           thursday: { open: "09:00", close: "22:00", closed: false },
           friday: { open: "09:00", close: "22:00", closed: false },
           saturday: { open: "10:00", close: "23:00", closed: false },
-          sunday: { open: "10:00", close: "22:00", closed: false },
-        },
-        notifications: {
-          newOrders: true,
-          orderUpdates: true,
-          reservations: true,
-          salesAlerts: true,
-          systemUpdates: false,
-        },
-        qrSettings: {
-          size: "medium",
-          includeLogo: true,
-          autoGenerate: true,
-        },
-        customMessages: {
-          orderComplete: "주문이 완료되었습니다. 맛있게 드세요! 😊",
-          reservationConfirmed: "예약이 확정되었습니다. 방문을 기다리겠습니다! 🎉",
-          servingComplete: "주문하신 음식이 준비되었습니다. 맛있게 드세요! 🍽️",
+          sunday: { open: "", close: "", closed: true },
         },
         updatedAt: new Date()
-      });
-      console.log('✅ 기본 설정 데이터 생성 완료');
-
-      console.log('🗑️ 임시 정보 정리...');
-      // 임시 정보 삭제
-      localStorage.removeItem('tempUserUid');
-      localStorage.removeItem('tempUserEmail');
-      localStorage.removeItem('tempUserPassword');
-      localStorage.removeItem('emailVerificationToken');
-      localStorage.removeItem('emailVerificationCode');
-      localStorage.removeItem('emailVerificationTime');
-      localStorage.removeItem('phoneVerificationToken');
-      localStorage.removeItem('tempUserPhone');
-      localStorage.removeItem('tempUserName');
-      localStorage.removeItem('phoneVerificationTime');
-      console.log('✅ 임시 정보 삭제 완료');
-
-      console.log('🎉 회원가입 완료!');
-      toast({
-        title: "회원가입이 완료되었습니다! 🎉",
-        description: "관리자 대시보드로 이동합니다.",
-      });
+      };
+      console.log('저장할 설정 데이터:', settingsData);
       
-      // 회원가입 완료 시 localStorage 정리
+      await setDoc(doc(db, "settings", "store"), settingsData);
+      console.log('Firestore 설정 데이터 저장 완료');
+      
+      console.log('=== 가입 정보 저장 완료 ===');
+      
+      // 회원가입 완료 플래그 제거
       localStorage.removeItem('isRegistering');
       
-      console.log('🔄 관리자 페이지로 이동...');
+      // 테이블 데이터 초기화 (0개 테이블로 시작)
+      localStorage.setItem('orderland-tables', JSON.stringify([]));
+      
+      toast({
+        title: "가입이 완료되었습니다!",
+        description: "관리자 페이지로 이동합니다.",
+      });
+      
+      // 관리자 페이지로 이동
       navigate("/admin");
+      
     } catch (error: any) {
-      console.error("❌ 회원가입 오류:", error);
-      console.log('오류 코드:', error.code);
-      console.log('오류 메시지:', error.message);
+      console.error('=== 회원가입 오류 ===');
+      console.error('오류 코드:', error.code);
+      console.error('오류 메시지:', error.message);
+      console.error('전체 오류:', error);
       
-      let errorMessage = "회원가입 중 오류가 발생했습니다.";
+      let errorMessage = '회원가입 중 오류가 발생했습니다.';
       
-      if (error.code === "auth/email-already-in-use") {
-        errorMessage = "이미 사용 중인 이메일입니다.";
-      } else if (error.code === "auth/weak-password") {
-        errorMessage = "비밀번호가 너무 약합니다.";
-      } else if (error.code === "auth/invalid-email") {
-        errorMessage = "유효하지 않은 이메일 형식입니다.";
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = '이미 사용 중인 이메일입니다.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = '비밀번호가 너무 약합니다. (최소 6자)';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = '유효하지 않은 이메일 형식입니다.';
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMessage = '네트워크 연결을 확인해주세요.';
       }
       
       toast({
         title: "회원가입 실패",
         description: errorMessage,
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
-      console.log('=== 회원가입 완료 프로세스 종료 ===');
     }
   };
 
@@ -706,7 +712,7 @@ const RegisterPage = () => {
               전화번호 인증
             </span>
             <span className={cn("text-sm", currentStep >= 2 ? "text-primary font-medium" : "text-muted-foreground")}>
-              가게정보 입력
+              가게정보 및 계정 입력
             </span>
           </div>
         </div>
@@ -763,14 +769,19 @@ const RegisterPage = () => {
               )}
 
               {!isVerificationSent ? (
-                <Button
-                  onClick={sendVerificationCode}
-                  disabled={isLoading}
-                  className="w-full h-12 text-base"
-                  size="lg"
-                >
-                  {isLoading ? "발송중..." : "📨 인증번호 받기"}
-                </Button>
+                <div className="space-y-4">
+                  {/* reCAPTCHA 컨테이너 */}
+                  <div id="recaptcha-container" className="flex justify-center"></div>
+                  
+                  <Button
+                    onClick={sendVerificationCode}
+                    disabled={isLoading}
+                    className="w-full h-12 text-base"
+                    size="lg"
+                  >
+                    {isLoading ? "발송중..." : "📨 인증번호 받기"}
+                  </Button>
+                </div>
               ) : (
                 <div className="space-y-4">
                   <div className="space-y-2">
@@ -778,8 +789,8 @@ const RegisterPage = () => {
                     <Input
                       id="verificationCode"
                       placeholder="6자리 인증번호 입력"
-                      value={phoneVerificationCode}
-                      onChange={(e) => setPhoneVerificationCode(e.target.value)}
+                      value={formData.verificationCode}
+                      onChange={(e) => setFormData(prev => ({ ...prev, verificationCode: e.target.value }))}
                       className="h-12 text-base text-center tracking-widest"
                       maxLength={6}
                     />
@@ -798,8 +809,7 @@ const RegisterPage = () => {
                 </div>
               )}
               
-              {/* reCAPTCHA 컨테이너 */}
-              <div id="recaptcha-container"></div>
+              
             </CardContent>
           </Card>
         )}
@@ -827,6 +837,14 @@ const RegisterPage = () => {
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* 전화번호 인증 상태 확인 */}
+              {!isPhoneVerified && (
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    전화번호 인증이 필요합니다. 이전 단계로 돌아가서 전화번호 인증을 완료해주세요.
+                  </p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="storeName">가게 이름</Label>
                 <div className="relative">
@@ -915,14 +933,82 @@ const RegisterPage = () => {
                     />
                   </div>
                   {!isEmailVerified ? (
-                    <Button
-                      onClick={sendEmailVerification}
-                      disabled={!formData.email || !formData.password || isLoading}
-                      variant="outline"
-                      className="h-12 px-6"
-                    >
-                      {isLoading ? "발송중..." : "인증 메일 보내기"}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={sendEmailVerificationLocal}
+                        disabled={!formData.email || !formData.password || isLoading}
+                        variant="outline"
+                        className="h-12 px-6"
+                      >
+                        {isLoading ? "발송중..." : "인증 메일 보내기"}
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          try {
+                            let currentUser = auth.currentUser;
+                            
+                            // 사용자가 없으면 이메일/비밀번호로 재로그인 시도
+                            if (!currentUser && formData.email && formData.password) {
+                              console.log('사용자가 없음, 재로그인 시도...');
+                              try {
+                                const userCredential = await signInWithEmailAndPassword(
+                                  auth,
+                                  formData.email,
+                                  formData.password
+                                );
+                                currentUser = userCredential.user;
+                                console.log('재로그인 성공:', currentUser.uid);
+                              } catch (loginError: any) {
+                                console.error('재로그인 실패:', loginError);
+                                toast({
+                                  title: "재로그인 실패",
+                                  description: "인증 메일을 다시 발송해주세요.",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+                            }
+                            
+                            if (!currentUser) {
+                              toast({
+                                title: "사용자가 없습니다",
+                                description: "인증 메일을 먼저 발송해주세요.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+
+                            // 사용자 정보 새로고침
+                            await currentUser.reload();
+                            
+                            if (currentUser.emailVerified) {
+                              setIsEmailVerified(true);
+                              toast({
+                                title: "이메일 인증 완료",
+                                description: "이메일 인증이 완료되었습니다.",
+                              });
+                            } else {
+                              toast({
+                                title: "이메일 인증 필요",
+                                description: "이메일을 확인하고 링크를 클릭한 후 다시 확인해주세요.",
+                                variant: "destructive",
+                              });
+                            }
+                          } catch (error: any) {
+                            console.error('이메일 인증 확인 오류:', error);
+                            toast({
+                              title: "인증 확인 실패",
+                              description: "다시 시도해주세요.",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                        variant="outline"
+                        className="h-12 px-6"
+                      >
+                        인증 확인
+                      </Button>
+                    </div>
                   ) : (
                     <Button
                       variant="default"
@@ -938,55 +1024,13 @@ const RegisterPage = () => {
                 )}
               </div>
 
-              {isEmailVerificationSent && !isEmailVerified && (
-                <div className="space-y-4 animate-fade-in">
-                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm text-blue-800">
-                      📧 인증 메일이 발송되었습니다. 이메일을 확인하여 인증을 완료해주세요.
-                    </p>
-                    <p className="text-sm text-blue-600 mt-2">
-                      이메일 인증을 완료한 후 아래 버튼을 클릭하여 인증 상태를 확인해주세요.
-                    </p>
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={checkEmailVerification}
-                      disabled={isLoading}
-                      variant="outline"
-                      className="flex-1 h-12"
-                    >
-                      {isLoading ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                          인증 확인중...
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="w-4 h-4 mr-2" />
-                          인증 상태 확인
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      onClick={sendEmailVerification}
-                      disabled={isLoading}
-                      variant="outline"
-                      className="h-12 px-4"
-                    >
-                      재발송
-                    </Button>
-                  </div>
-                </div>
-              )}
-
               <Button
-                onClick={proceedToStep3}
-                disabled={!isEmailVerified}
+                onClick={submitBusinessRegistration}
+                disabled={!isEmailVerified || !isPhoneVerified}
                 className="w-full h-12 text-base"
                 size="lg"
               >
-                회원가입 완료
+                {isLoading ? "회원가입 중..." : "회원가입 완료"}
               </Button>
             </CardContent>
           </Card>

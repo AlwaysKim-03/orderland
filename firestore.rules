@@ -7,61 +7,69 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    // 모든 컬렉션에 대한 기본 규칙 - 인증된 사용자는 읽기/쓰기 가능
+    // 기본 규칙 - 인증된 사용자는 모든 권한, 비인증 사용자는 읽기만
     match /{document=**} {
-      allow read, write: if isAuthenticated();
+      allow read: if true;  // 모든 사용자가 읽기 가능
+      allow write: if isAuthenticated();  // 인증된 사용자만 쓰기 가능
     }
     
-    // 특정 컬렉션별 세부 규칙 (필요시)
+    // 특정 컬렉션별 세부 규칙
     match /settings/{settingId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if true;  // 설정은 모든 권한 허용
     }
     
     match /menus/{menuId} {
-      allow read: if true;  // 임시로 인증 없이 읽기 허용
-      allow write: if isAuthenticated();
+      allow read: if true;  // 메뉴는 모든 사용자가 읽기 가능
+      allow write: if isAuthenticated();  // 인증된 사용자만 쓰기
     }
     
     match /categories/{categoryId} {
-      allow read: if true;  // 임시로 인증 없이 읽기 허용
-      allow write: if isAuthenticated();
+      allow read: if true;  // 카테고리는 모든 사용자가 읽기 가능
+      allow write: if isAuthenticated();  // 인증된 사용자만 쓰기
     }
     
     match /tables/{tableId} {
-      allow read, write: if isAuthenticated();
+      allow read: if true;  // 테이블은 모든 사용자가 읽기 가능
+      allow write: if isAuthenticated();  // 인증된 사용자만 쓰기
     }
     
     match /orders/{orderId} {
-      allow read: if true;  // 임시로 인증 없이 읽기 허용
-      allow write: if isAuthenticated();
+      allow read: if true;  // 주문은 모든 사용자가 읽기 가능 (실시간 감지용)
+      allow write: if isAuthenticated();  // 인증된 사용자만 쓰기
     }
     
     match /reservations/{reservationId} {
-      allow read, write: if isAuthenticated();
+      allow read: if true;  // 예약은 모든 사용자가 읽기 가능
+      allow write: if isAuthenticated();  // 인증된 사용자만 쓰기
     }
     
+    // users 컬렉션 - 회원가입/로그인을 위해 모든 권한 허용
     match /users/{userId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if true;  // 회원가입/로그인을 위해 임시로 모든 권한 허용
     }
     
     match /products/{productId} {
-      allow read, write: if isAuthenticated();
+      allow read: if true;  // 상품은 모든 사용자가 읽기 가능
+      allow write: if isAuthenticated();  // 인증된 사용자만 쓰기
     }
     
     match /staffCalls/{callId} {
-      allow read, write: if isAuthenticated();
+      allow read: if true;  // 직원 호출은 모든 사용자가 읽기 가능
+      allow write: if isAuthenticated();  // 인증된 사용자만 쓰기
     }
     
     match /staff_calls/{callId} {
-      allow read, write: if isAuthenticated();
+      allow read: if true;  // 직원 호출은 모든 사용자가 읽기 가능
+      allow write: if isAuthenticated();  // 인증된 사용자만 쓰기
     }
     
     match /sales_summary/{summaryId} {
-      allow read, write: if isAuthenticated();
+      allow read: if true;  // 매출 요약은 모든 사용자가 읽기 가능
+      allow write: if isAuthenticated();  // 인증된 사용자만 쓰기
     }
     
     match /_test/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isAuthenticated();  // 테스트는 인증된 사용자만
     }
   }
 } 

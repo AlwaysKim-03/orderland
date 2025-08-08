@@ -1,0 +1,41 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // 사용자 인증 확인 함수
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // 사용자가 자신의 파일에만 접근할 수 있는지 확인하는 함수
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // 상품 이미지 규칙 (사용자별 경로)
+    match /products/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) && 
+        request.resource.size < 5 * 1024 * 1024 && // 5MB 이하
+        request.resource.contentType.matches('image/.*');
+    }
+    
+    // 기존 상품 이미지 규칙 (하위 호환성)
+    match /products/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && 
+        request.resource.size < 5 * 1024 * 1024 && // 5MB 이하
+        request.resource.contentType.matches('image/.*');
+    }
+    
+    // 사용자별 파일 규칙 (향후 확장용)
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // 테스트 파일 규칙
+    match /_test/{fileName} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+} 

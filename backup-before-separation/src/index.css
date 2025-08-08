@@ -1,0 +1,229 @@
+@import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 오더랜드 디자인 시스템 - 당근마켓 스타일의 친근하고 따뜻한 느낌 */
+
+@layer base {
+  :root {
+    /* 기본 배경과 텍스트 */
+    --background: 0 0% 100%;
+    --foreground: 25 25% 15%;
+
+    /* 카드 컴포넌트 */
+    --card: 0 0% 100%;
+    --card-foreground: 25 25% 15%;
+
+    /* 팝오버 */
+    --popover: 0 0% 100%;
+    --popover-foreground: 25 25% 15%;
+
+    /* 주요 색상 - 따뜻한 오렌지 (당근마켓 스타일) */
+    --primary: 25 95% 53%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 25 95% 48%;
+    --primary-light: 25 95% 95%;
+
+    /* 보조 색상 - 부드러운 회색 */
+    --secondary: 25 10% 95%;
+    --secondary-foreground: 25 25% 25%;
+
+    /* 음소거된 색상 */
+    --muted: 25 8% 96%;
+    --muted-foreground: 25 15% 55%;
+
+    /* 강조 색상 - 연한 오렌지 */
+    --accent: 25 70% 96%;
+    --accent-foreground: 25 50% 30%;
+
+    /* 위험/삭제 색상 */
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* 성공 색상 - 신선한 초록 */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --success-light: 142 76% 95%;
+
+    /* 경고 색상 */
+    --warning: 45 93% 47%;
+    --warning-foreground: 0 0% 100%;
+    --warning-light: 45 93% 95%;
+
+    /* 테두리와 입력 필드 */
+    --border: 25 20% 90%;
+    --input: 25 20% 94%;
+    --ring: 25 95% 53%;
+
+    /* 모서리 둥글기 - 당근마켓 스타일 */
+    --radius: 12px;
+
+    /* 사이드바 */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 25 25% 25%;
+    --sidebar-primary: 25 95% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 25 15% 95%;
+    --sidebar-accent-foreground: 25 25% 25%;
+    --sidebar-border: 25 20% 90%;
+    --sidebar-ring: 25 95% 53%;
+
+    /* 그라디언트 */
+    --gradient-primary: linear-gradient(135deg, hsl(25 95% 53%), hsl(35 95% 58%));
+    --gradient-secondary: linear-gradient(135deg, hsl(25 10% 98%), hsl(25 8% 96%));
+    --gradient-warm: linear-gradient(135deg, hsl(25 95% 95%), hsl(35 90% 92%));
+
+    /* 그림자 */
+    --shadow-sm: 0 1px 2px 0 hsl(25 25% 15% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(25 25% 15% / 0.1), 0 2px 4px -1px hsl(25 25% 15% / 0.06);
+    --shadow-lg: 0 10px 15px -3px hsl(25 25% 15% / 0.1), 0 4px 6px -2px hsl(25 25% 15% / 0.05);
+    --shadow-warm: 0 4px 20px hsl(25 95% 53% / 0.15);
+  }
+
+  .dark {
+    /* 다크모드 배경과 텍스트 */
+    --background: 25 15% 8%;
+    --foreground: 25 10% 95%;
+
+    /* 다크모드 카드 */
+    --card: 25 15% 10%;
+    --card-foreground: 25 10% 95%;
+
+    /* 다크모드 팝오버 */
+    --popover: 25 15% 10%;
+    --popover-foreground: 25 10% 95%;
+
+    /* 다크모드 주요 색상 */
+    --primary: 25 85% 60%;
+    --primary-foreground: 25 15% 8%;
+    --primary-hover: 25 85% 55%;
+    --primary-light: 25 50% 15%;
+
+    /* 다크모드 보조 색상 */
+    --secondary: 25 8% 15%;
+    --secondary-foreground: 25 10% 85%;
+
+    /* 다크모드 음소거 색상 */
+    --muted: 25 8% 12%;
+    --muted-foreground: 25 8% 65%;
+
+    /* 다크모드 강조 색상 */
+    --accent: 25 20% 15%;
+    --accent-foreground: 25 85% 60%;
+
+    /* 다크모드 위험 색상 */
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* 다크모드 성공 색상 */
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 100%;
+    --success-light: 142 50% 15%;
+
+    /* 다크모드 경고 색상 */
+    --warning: 45 85% 55%;
+    --warning-foreground: 25 15% 8%;
+    --warning-light: 45 50% 15%;
+
+    /* 다크모드 테두리와 입력 */
+    --border: 25 15% 20%;
+    --input: 25 15% 15%;
+    --ring: 25 85% 60%;
+
+    /* 다크모드 사이드바 */
+    --sidebar-background: 25 15% 10%;
+    --sidebar-foreground: 25 10% 85%;
+    --sidebar-primary: 25 85% 60%;
+    --sidebar-primary-foreground: 25 15% 8%;
+    --sidebar-accent: 25 10% 15%;
+    --sidebar-accent-foreground: 25 10% 85%;
+    --sidebar-border: 25 15% 20%;
+    --sidebar-ring: 25 85% 60%;
+
+    /* 다크모드 그라디언트 */
+    --gradient-primary: linear-gradient(135deg, hsl(25 85% 60%), hsl(35 85% 65%));
+    --gradient-secondary: linear-gradient(135deg, hsl(25 8% 12%), hsl(25 8% 15%));
+    --gradient-warm: linear-gradient(135deg, hsl(25 50% 15%), hsl(35 50% 18%));
+
+    /* 다크모드 그림자 */
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.3);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.4), 0 2px 4px -1px hsl(0 0% 0% / 0.3);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.4), 0 4px 6px -2px hsl(0 0% 0% / 0.3);
+    --shadow-warm: 0 4px 20px hsl(25 85% 60% / 0.25);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-pretendard;
+  }
+
+  /* 오더랜드 스타일 - 친근하고 따뜻한 UI */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold;
+  }
+}
+
+@layer components {
+  /* 버튼 애니메이션 - 당근마켓 스타일 */
+  .btn-bounce {
+    @apply transition-transform duration-150 active:scale-95;
+  }
+
+  /* 카드 호버 효과 */
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-md hover:-translate-y-1;
+  }
+
+  /* 따뜻한 그라디언트 배경 */
+  .bg-warm-gradient {
+    background: var(--gradient-warm);
+  }
+
+  .bg-primary-gradient {
+    background: var(--gradient-primary);
+  }
+
+  /* 성공/경고/에러 알림 스타일 */
+  .alert-success {
+    @apply bg-green-50 border-green-200 text-green-800;
+  }
+
+  .alert-warning {
+    @apply bg-yellow-50 border-yellow-200 text-yellow-800;
+  }
+
+  .alert-error {
+    @apply bg-red-50 border-red-200 text-red-800;
+  }
+
+  /* 메뉴 카드 스타일 */
+  .menu-card {
+    @apply bg-card rounded-xl border border-border p-4 transition-all duration-200;
+    @apply hover:shadow-lg hover:border-primary/20 hover:-translate-y-1;
+  }
+
+  /* 주문 버튼 스타일 */
+  .order-button {
+    @apply bg-primary text-primary-foreground font-medium rounded-lg px-6 py-3;
+    @apply transition-all duration-200 hover:bg-primary/90 active:scale-95;
+    @apply shadow-md hover:shadow-lg;
+  }
+
+  /* QR 코드 영역 스타일 */
+  .qr-container {
+    @apply bg-white p-6 rounded-xl shadow-lg border-2 border-primary/10;
+  }
+
+  /* 통계 카드 스타일 */
+  .stats-card {
+    @apply bg-gradient-to-br from-white to-primary/5 rounded-xl border border-primary/10;
+    @apply p-6 transition-all duration-200 hover:shadow-md;
+  }
+}
